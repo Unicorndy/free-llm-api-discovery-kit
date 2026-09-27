@@ -64,7 +64,7 @@ Each provider card has a **setup guide**: sign up, get a key, curl/Python/JavaSc
 | `worker/worker.js`, `worker/discover.js`, `worker/wrangler.toml` | The Worker, the web discovery engine, and non-secret settings (incl. the KV binding) |
 | `searxng/` | Docker Compose stack: SearXNG, nginx gate (key check + rate limit), cloudflared. Settings and secrets in `searxng/.env` |
 | `SETUP.md`, `SECURITY.md` | Setup guide for your own accounts; security walkthrough |
-| `setup.mjs`, `lib/`, `ui/` | Original guided setup assistant (needs someone at a screen; predates discovery) |
+| `setup.mjs`, `lib/`, `ui/` | Guided setup assistant (needs someone at a screen). Deploys the Worker with discovery storage and the site; the daily model tests still need SETUP.md step 8 |
 
 ---
 
@@ -148,7 +148,7 @@ curl https://search-chat.YOUR-SUBDOMAIN.workers.dev/v1/chat/completions \
 
 ## Setup assistant (original, optional)
 
-`npm install && npx playwright install chromium && npm run setup` opens a local guided assistant, on `127.0.0.1` with a session code. It collects keys in a real browser window and deploys everything. It needs someone physically at a screen; on this headless server, use the CLI steps above instead.
+`npm install && npx playwright install chromium && npm run setup` opens a local guided assistant, on `127.0.0.1` with a session code. It collects keys in a real browser window, deploys the Worker (with its discovery module and KV storage) and publishes the site. It doesn't set up SearXNG or the daily model tests: use SETUP.md steps 8 and 9 for those. It needs someone physically at a screen; on this headless server, use the CLI steps above instead.
 
 ## License
 

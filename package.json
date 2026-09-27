@@ -7,7 +7,7 @@
   "scripts": {
     "setup": "node setup.mjs",
     "browser": "playwright install chromium",
-    "test": "node --test worker/test/worker.test.mjs"
+    "test": "node --test worker/test/worker.test.mjs worker/test/setup-assistant.test.mjs"
   },
   "engines": {
     "node": ">=20"
