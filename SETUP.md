@@ -182,6 +182,7 @@ Check it: `curl https://<search.example.com>/` must return **403**. After that, 
 ## 10. Final checks
 
 - [ ] `npm test` passes (Worker tests, no network needed).
+- [ ] `scripts/smoke-live.sh` passes against your deployment (set `SITE_URL`, `WORKER_URL`, and optionally `SEARXNG_URL` and `SITE_REPO`; it reads your API key and SearXNG key from their local files and never prints them).
 
 - [ ] `/health` lists your providers and `"api": true`.
 - [ ] A POST to `/chat` with `-H "Origin: https://evil.example"` returns **403**.
