@@ -62,7 +62,7 @@ How the code keeps them there:
 | Protection | Code |
 | --- | --- |
 | **Rate limit:** 15 requests a minute per visitor IP, 30 per API key | `withinRateLimit` (~L394), `RATE_LIMIT_PER_MIN` / `API_RATE_LIMIT_PER_MIN` (~L38) |
-| **Request size:** 64 KB body cap, checked before and after reading | `MAX_BODY` (~L40), `readJson` (~L192) |
+| **Request size:** 64 KB body cap. The body is read in pieces and cut off as soon as it passes the cap, even when a client sends no `Content-Length` | `MAX_BODY` (~L40), `readJson` (~L192) |
 | **Conversation shape:** at most 40 messages; roles limited to system/user/assistant; 12,000 characters each and 60,000 in total | `cleanMessages` (~L200) |
 | **Search rationing:** Tavily (1,000 credits a month) runs only for time-sensitive questions, and only when SearXNG returns fewer than 3 results. Results are cached for an hour. | `search` |
 | **Daily SearXNG budget:** `SEARXNG_DAILY_LIMIT` (default 300) searches a day across chat and discovery, counted in KV across all Worker instances (approximate). Once it's used up, chat search skips SearXNG (the browser's Wikipedia and DuckDuckGo still work) and discovery shows the last results. `/health` shows `searxngToday`. | `takeSearchBudget` |
@@ -83,7 +83,9 @@ How the code keeps them there:
 | **Safe links:** Markdown links must match `https?://`, so `javascript:` and `data:` URLs can't become links. Every link gets `target="_blank" rel="noopener noreferrer nofollow"`. Search result URLs go through `safeUrl`, which allows only http(s). | `renderInline`, `safeUrl` (~L130) |
 | **`innerHTML` only with escaped output:** the only `innerHTML` writes use `renderMarkdown` output (~L618, ~L644). Everything else, including the API page's model list, is built with `textContent`. | `site/app.js`, `site/api.js` |
 | **Prompt-injection guard:** web results are sent under a heading that labels them untrusted, and the system prompt tells the model to ignore instructions inside them | `site/app.js` ~L263 and ~L606 |
-| **Safety check:** Llama Guard screens each question before any provider sees it; a refusal comes back as a normal reply | `isUnsafe` (`worker/worker.js` ~L174) |
+| **Safety check:** Llama Guard screens **everything the user wrote** before any provider sees it: the whole last message, in parallel 4,000-character chunks (messages can be 12,000), plus earlier user turns, since API callers can send any history. A refusal comes back as a normal reply. |
+| **Web results as a separate field:** the site sends search results in `sources`, not inside the user's text. The Worker validates them (at most 8; http(s) URLs only; lengths clipped), formats the "Web results (untrusted data)" block itself, and screens only the user's own words. So nobody can hide text from the safety check behind a fake "Web results" marker. | `cleanSources`, `chat()` |
+| **Links can't redirect a saved key:** `chat.html?provider=custom&base=…` links can switch the endpoint, but if the address differs from the saved one, the key saved for the custom provider is cleared first, so it can never be sent to an address the visitor didn't choose. | URL preselect block in `site/app.js` | `isUnsafe` (`worker/worker.js` ~L174) |
 
 **Limits:**
 - **The safety check fails open** (~L185): if Workers AI is down, questions go through, and the system prompt and providers' own moderation still apply.
@@ -140,7 +142,20 @@ The live web search treats everything it reads as hostile.
 
 ---
 
-## 8. Checklist for your deployment
+## 8. Automated tests
+
+`npm test` runs `worker/test/worker.test.mjs` (Node's built-in runner, mocked Cloudflare bindings, no network). It covers:
+- secrets never appearing in responses
+- the origin lock, API keys (401/403), preflight and unknown routes
+- size, shape and chunked-body limits, and the rate limit
+- the safety check: fake markers, long messages, earlier turns
+- server-side sources and key-only features
+- the URL safety rules for discovery (private and IP hosts, credentials, ports) and link validation against search results
+- the hourly and budget limits, visitors not being able to force a run, community model restrictions, and the SearXNG key header
+
+Run it after every change to the Worker.
+
+## 9. Checklist for your deployment
 
 - [ ] `ALLOWED_ORIGIN` is exactly your github.io origin.
 - [ ] No key is in any committed file: `git log -p | grep -E 'gsk_|sk-or-|nvapi-|tvly-|sc_[0-9a-f]{48}'` returns nothing, in **both** repos.
@@ -149,7 +164,7 @@ The live web search treats everything it reads as hostile.
 - [ ] Each project using the API has its **own** key.
 - [ ] You haven't pasted tokens into chats, issues or screenshots. If you did, rotate them.
 
-## 9. Rotating a secret
+## 10. Rotating a secret
 
 | Secret | Steps |
 | --- | --- |

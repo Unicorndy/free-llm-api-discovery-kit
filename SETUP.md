@@ -181,6 +181,8 @@ Check it: `curl https://<search.example.com>/` must return **403**. After that, 
 
 ## 10. Final checks
 
+- [ ] `npm test` passes (18 Worker tests, no network needed).
+
 - [ ] `/health` lists your providers and `"api": true`.
 - [ ] A POST to `/chat` with `-H "Origin: https://evil.example"` returns **403**.
 - [ ] `/v1/models` with a wrong key returns **401**; with your key it lists models.

@@ -5,3 +5,4 @@ node_modules/
 searxng/.env
 .wrangler/
 .playwright-mcp/
+.claude/*.local.md
