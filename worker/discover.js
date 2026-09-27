@@ -30,22 +30,35 @@ const KNOWN = {
   'cloudflare.com': 'workers-ai', 'pollinations.ai': 'pollinations',
 };
 
+function withTimeout(promise, ms) {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('The AI took too long. Try again later.')), ms); })])
+    .finally(() => clearTimeout(timer));
+}
+
 /* ---------- URL safety ---------- */
 const hostOf = (u) => { try { return new URL(u).hostname.toLowerCase(); } catch { return ''; } };
 export const baseDomain = (host) => host.split('.').slice(-2).join('.');
 
-export function publicHttpsUrl(value) {
+const TRAILING_PUNCT = new Set([')', ']', "'", '"', ',', '.', ';']);
+// strict: also require plain URL characters (for API base URLs, which end up in code snippets and shell commands).
+export function publicHttpsUrl(value, { strict = false } = {}) {
+  let raw = String(value || '').trim().slice(0, 2048);
+  while (raw && TRAILING_PUNCT.has(raw[raw.length - 1])) raw = raw.slice(0, -1); // linear, unlike a trailing regex
   let u;
-  try { u = new URL(String(value || '').trim().replace(/[)\]'",.;]+$/, '')); } catch { return ''; }
+  try { u = new URL(raw); } catch { return ''; }
   if (u.protocol !== 'https:' || u.username || u.password) return '';
   if (u.port && u.port !== '443') return '';
-  const h = u.hostname.toLowerCase();
+  const h = u.hostname.toLowerCase().replace(/\.+$/, ''); // "localhost." is localhost
   if (!h.includes('.') || h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return '';
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.startsWith('[') || h.includes(':')) return ''; // no IP literals
   u.hash = '';
-  return u.href.replace(/\/+$/, '');
+  const href = u.href.replace(/\/+$/, '');
+  if (strict && !/^https:\/\/[A-Za-z0-9._~:\/%+@=-]+$/.test(href)) return '';
+  return href;
 }
 
+export const SAFE_MODEL_ID = /^[\w.:@\/+-]{1,120}$/;
 const clip = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
 
 /* ---------- KV ---------- */
@@ -57,12 +70,26 @@ export async function latestDiscovery(env) {
 export async function communityProvider(env, id) {
   const d = await latestDiscovery(env);
   const p = d && (d.providers || []).find((x) => x.id === id && x.status === 'working' && x.baseUrl);
-  return p && publicHttpsUrl(p.baseUrl) ? p : null;
+  return p && publicHttpsUrl(p.baseUrl, { strict: true }) && SAFE_MODEL_ID.test(String(p.testedModel || '')) ? p : null;
 }
 
 /* ---------- The run ---------- */
 // emit(event) streams progress to the page: {type:'status'|'found'|'result'|'error', ...}
-export async function runDiscovery(env, { force = false, searchWeb, budget = async () => true, emit }) {
+// One live run per isolate at a time; others in the same isolate wait for it and share the result.
+let inflight = null;
+
+export async function runDiscovery(env, opts) {
+  if (inflight) {
+    opts.emit({ type: 'status', message: 'A web search is already running. Waiting for its results…' });
+    const data = await inflight.catch(() => null) || await latestDiscovery(env);
+    if (data) opts.emit({ type: 'result', data, cached: true });
+    return data;
+  }
+  inflight = runDiscoveryOnce(env, opts);
+  try { return await inflight; } finally { inflight = null; }
+}
+
+async function runDiscoveryOnce(env, { force = false, searchWeb, budget = async () => true, emit }) {
   if (!env.DISCOVERY) throw new Error('Discovery storage (KV) is not set up.');
   const previous = await latestDiscovery(env);
   const age = previous ? Date.now() - Date.parse(previous.at) : Infinity;
@@ -81,7 +108,14 @@ export async function runDiscovery(env, { force = false, searchWeb, budget = asy
     if (previous) emit({ type: 'result', data: previous, cached: true });
     return previous;
   }
-  await env.DISCOVERY.put('web:lock', '1', { expirationTtl: LOCK_TTL_S });
+  // Lock with a random token, then read it back: if another run wrote its token meanwhile, let it go ahead.
+  const token = crypto.randomUUID();
+  await env.DISCOVERY.put('web:lock', token, { expirationTtl: LOCK_TTL_S });
+  if ((await env.DISCOVERY.get('web:lock')) !== token) {
+    emit({ type: 'status', message: 'Someone else started a web search at the same moment. Showing the last results.' });
+    if (previous) emit({ type: 'result', data: previous, cached: true });
+    return previous;
+  }
 
   try {
     // 1. Search
@@ -103,7 +137,7 @@ export async function runDiscovery(env, { force = false, searchWeb, budget = asy
     emit({ type: 'status', message: `Found ${results.length} pages. An AI is reading them for free LLM APIs…` });
 
     // 2. Extract with AI (results are untrusted data)
-    const extracted = await extractProviders(env, results);
+    const extracted = await withTimeout(extractProviders(env, results), 90000);
     const providers = validate(extracted, results);
     emit({ type: 'status', message: `Identified ${providers.length} providers. Testing the ones that need no key…` });
 
@@ -129,7 +163,7 @@ export async function runDiscovery(env, { force = false, searchWeb, budget = asy
     emit({ type: 'result', data, cached: false });
     return data;
   } finally {
-    await env.DISCOVERY.delete('web:lock');
+    if ((await env.DISCOVERY.get('web:lock')) === token) await env.DISCOVERY.delete('web:lock'); // never delete another run's lock
   }
 }
 
@@ -204,7 +238,8 @@ function validate(items, results) {
     const domain = website ? baseDomain(hostOf(website)) : '';
     if (!domain && !link(it.baseUrl)) continue; // no confirmed website or API address: too vague to show
     const id = domain || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
-    let baseUrl = link(it.baseUrl);
+    let baseUrl = publicHttpsUrl(it.baseUrl, { strict: true });
+    if (baseUrl && !seenDomains.has(baseDomain(hostOf(baseUrl)))) baseUrl = '';
     if (baseUrl && domain && baseDomain(hostOf(baseUrl)) !== domain) baseUrl = ''; // API must be on the provider's own domain
     const p = {
       id,
@@ -231,7 +266,7 @@ function validate(items, results) {
   return [...byDomain.values()];
 }
 
-async function readCapped(res, limit = 262144) {
+export async function readCapped(res, limit = 262144) {
   const len = Number(res.headers.get('Content-Length') || 0);
   if (len > limit) throw new Error('response too large');
   // Read in pieces and stop at the cap, even when the server sends no Content-Length.
@@ -253,7 +288,7 @@ async function readCapped(res, limit = 262144) {
 
 // Test an OpenAI-compatible endpoint without any key: list models, then ask one for "pong".
 export async function testKeyless(baseUrl) {
-  const base = publicHttpsUrl(baseUrl);
+  const base = publicHttpsUrl(baseUrl, { strict: true });
   if (!base) return { status: 'unverified', error: 'not a public https URL' };
   const started = Date.now();
   try {
@@ -264,7 +299,9 @@ export async function testKeyless(baseUrl) {
     const j = JSON.parse(await readCapped(lr));
     const ids = (Array.isArray(j) ? j : j.data || []).map((m) => (typeof m === 'string' ? m : m && (m.id || m.name)))
       .filter((x) => typeof x === 'string').slice(0, 200);
-    const model = ids.find((x) => /instruct|chat|llama|qwen|gpt|mistral|gemma|deepseek/i.test(x) && !/embed|whisper|tts|image|vision|guard/i.test(x)) || ids[0];
+    // Model ids come from an untrusted server and end up in code snippets: plain characters only.
+    const safeIds = ids.filter((x) => SAFE_MODEL_ID.test(x));
+    const model = safeIds.find((x) => /instruct|chat|llama|qwen|gpt|mistral|gemma|deepseek/i.test(x) && !/embed|whisper|tts|image|vision|guard/i.test(x)) || safeIds[0];
     if (!model) return { status: 'failed', error: 'no models listed' };
     const cr = await fetch(`${base}/chat/completions`, {
       method: 'POST',

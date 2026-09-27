@@ -112,7 +112,9 @@ const settings = Object.assign(
   store.get('sc.settings', {})
 );
 if (!PROVIDERS[settings.provider]) settings.provider = SITE_SERVER ? 'site' : 'pollinations';
-const persistSettings = () => store.set('sc.settings', settings);
+// A custom endpoint chosen by a link lasts only for this visit: saving writes the visitor's own choice back.
+let linkOverride = null;
+const persistSettings = () => store.set('sc.settings', linkOverride ? { ...settings, ...linkOverride } : settings);
 
 // Links from the discovery page: chat.html?model=provider/model (site server) or ?provider=custom&base=https://…&model=…
 (() => {
@@ -121,9 +123,16 @@ const persistSettings = () => store.set('sc.settings', settings);
   const provider = q.get('provider') || '';
   if (provider === 'custom' && safeUrl(q.get('base') || '').startsWith('https://')) {
     const base = trimSlash(q.get('base'));
+    window.history.replaceState(null, '', location.pathname);
+    let host = base;
+    try { host = new URL(base).host; } catch { /* keep */ }
+    // Ask first: this sends the conversation to a server the visitor may not know.
+    if (!window.confirm(`This link wants to send your chat messages to ${host}.\n\nOnly continue if you trust that service. Use it for this visit?`)) return;
     // A link must never send a key saved for one endpoint to a different one.
     if (base !== settings.baseUrl) saveKey('custom', '', false);
+    linkOverride = { provider: settings.provider, baseUrl: settings.baseUrl, model: settings.model };
     Object.assign(settings, { provider: 'custom', baseUrl: base, model });
+    return;
   } else if (provider === 'pollinations' && PROVIDERS.pollinations) {
     Object.assign(settings, { provider: 'pollinations', model: model || PROVIDERS.pollinations.defaultModel });
   } else if (model && PROVIDERS.site) {
@@ -362,12 +371,15 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function renderInline(text, sources) {
-  let s = escapeHtml(text);
-  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Code spans and links are set aside first, so later rules (bold, citations) can't reach inside them.
+  const slots = [];
+  const hold = (html) => `\u0000${slots.push(html) - 1}\u0000`;
+  let s = escapeHtml(String(text).replace(/\u0000/g, ''));
+  s = s.replace(/`([^`]{1,2000})`/g, (m, c) => hold(`<code>${c}</code>`));
+  s = s.replace(/\[([^\]\n]{1,300})\]\((https?:\/\/[^\s)]{1,2000})\)/g,
+    (m, label, url) => hold(`<a href="${url}" target="_blank" rel="noopener noreferrer nofollow">${label}</a>`));
   s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, '$1<em>$2</em>');
-  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-    (m, label, url) => `<a href="${url}" target="_blank" rel="noopener noreferrer nofollow">${label}</a>`);
   s = s.replace(/\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\]/g, (m, nums) => {
     const ns = nums.split(',').map((n) => parseInt(n, 10));
     if (!sources || !sources.length || ns.some((n) => !sources[n - 1])) return m;
@@ -376,7 +388,7 @@ function renderInline(text, sources) {
       return `<a class="cite" href="${escapeHtml(src.url)}" target="_blank" rel="noopener noreferrer nofollow" title="${escapeHtml(src.title)}">${n}</a>`;
     }).join('');
   });
-  return s;
+  return s.replace(/\u0000(\d+)\u0000/g, (m, i) => slots[Number(i)] || '');
 }
 
 function renderBlocks(text, sources) {
@@ -776,6 +788,7 @@ function saveFromDialog() {
   settings.remember = els.remember.checked;
   settings.model = model;
   saveKey(id, key, settings.remember);
+  linkOverride = null; // the visitor chose these settings themselves, so they're kept
   persistSettings();
   updatePill();
   els.dlg.close();
