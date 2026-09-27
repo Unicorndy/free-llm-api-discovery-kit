@@ -50,7 +50,7 @@ How the code keeps them there:
 | --- | --- | --- |
 | **Origin lock** | `isAllowedOrigin` (~L406) | Only `ALLOWED_ORIGIN` (your github.io site) gets CORS headers. Browsers on any other site can't call `/chat` or `/search`. Preflight (`OPTIONS`) from other origins gets 403 (~L474). |
 | **API keys** | `validApiKey` (~L412) | `Authorization: Bearer <key>` is compared with every key in `API_KEYS` using **`crypto.subtle.timingSafeEqual`** (~L419), so response timing doesn't reveal how much of a key matched. A wrong key gets 401, and no key and no allowed origin gets 403 (~L498). |
-| **Route allow-list** | `ROUTES` (~L443) | Only listed method and path pairs exist. Everything else gets 404 before any work is done. |
+| **Route allow-list** | `ROUTES` (~L443) | Only listed method and path pairs exist. Everything else gets 404 before any work is done. Provider ids from requests are looked up with `Object.hasOwn`, so ids like `__proto__` or `constructor` can't reach built-in object properties. |
 | **Key-only features** | `chat(..., trusted)` (~L216–L260), `provider-models` (~L508) | Only API-key callers may use `strict`, try **arbitrary** model ids, or list a provider's models. The website may only pick models that discovery has checked (~L240), so it can't be used to run expensive or unexpected models. |
 
 **Important limit:** the `Origin` header proves nothing outside a browser. A script can send `Origin: https://<you>.github.io` and use `/chat` like a visitor. That's accepted for a public free site. Such a script still hits the per-IP rate limit and can't reach any key-only feature.
@@ -81,6 +81,8 @@ How the code keeps them there:
 | **Strict Content-Security-Policy:** only the site's own scripts run (no inline scripts, no `eval`); network calls must be same-origin or HTTPS; no plugins, no `<base>` changes, no form posts | `<meta http-equiv="Content-Security-Policy">` in `site/index.html` and `site/api.html` (line 7) |
 | **Escape first, then add a little Markdown:** model output is fully HTML-escaped, and only then are a few safe tags added (code, bold, italic, links, lists) | `escapeHtml` (~L353), `renderInline` (~L356), `renderMarkdown` (~L403) in `site/app.js` |
 | **Safe links:** Markdown links must match `https?://`, so `javascript:` and `data:` URLs can't become links. Every link gets `target="_blank" rel="noopener noreferrer nofollow"`. Search result URLs go through `safeUrl`, which allows only http(s). | `renderInline`, `safeUrl` (~L130) |
+| **No framing (clickjacking):** GitHub Pages can't send `frame-ancestors` or `X-Frame-Options` headers, so each page's script breaks out of any frame, or hides the page if that's blocked. | top of `home.js`, `app.js`, `api.js` |
+| **`nosniff`:** every JSON response from the Worker carries `X-Content-Type-Options: nosniff`. | `json()` in `worker.js` |
 | **`innerHTML` only with escaped output:** the only `innerHTML` writes use `renderMarkdown` output (~L618, ~L644). Everything else, including the API page's model list, is built with `textContent`. | `site/app.js`, `site/api.js` |
 | **Prompt-injection guard:** web results are sent under a heading that labels them untrusted, and the system prompt tells the model to ignore instructions inside them | `site/app.js` ~L263 and ~L606 |
 | **Safety check:** Llama Guard screens **everything the user wrote** before any provider sees it: the whole last message, in parallel 4,000-character chunks (messages can be 12,000), plus earlier user turns, since API callers can send any history. A refusal comes back as a normal reply. |
@@ -100,6 +102,7 @@ How the code keeps them there:
 | --- | --- |
 | **No open ports:** the Compose file publishes no host ports. The only way in is the outbound Cloudflare Tunnel run by the `cloudflared` container. | `searxng/docker-compose.yml` |
 | **Key gate:** the nginx gate forwards to SearXNG only when the `X-Search-Key` header matches `SEARXNG_KEY`; everything else gets 403. The key check runs before the rate limit, so strangers can't use up the budget. The header is stripped before reaching SearXNG. | `searxng/nginx.conf.template` |
+| **Smallest possible surface:** only `GET /search` (and `GET /healthz`) are passed on. Every other path, including `/config`, `/stats` and `/preferences`, gets 404, and other methods are refused. | `location = /search` in `nginx.conf.template` |
 | **Hard rate limit:** one shared bucket for all searches, `SEARXNG_RATE` (default 30 a minute) with short bursts of 10; over it, 429. This backstop holds even if the Worker misbehaves. | `limit_req` in `nginx.conf.template` |
 | **Random 256-bit secrets:** `SEARXNG_KEY` and `SEARXNG_SECRET` come from `openssl rand -hex 32` and live in `.env` (mode 600) | `SETUP.md` step 9 |
 | **Least privilege:** `cloudflared` runs as your user id, not root, and mounts only the one tunnel credentials file, read-only | `docker-compose.yml` (`user:`, `:ro`) |
@@ -121,7 +124,7 @@ The live web search treats everything it reads as hostile.
 | --- | --- |
 | **Untrusted input, labelled as such:** search results go to the AI as data, and the system prompt says to ignore instructions inside them | `extractProviders` |
 | **Strict output validation:** every AI-provided link must be `https` with no credentials, no custom port and no IP literal. It must be on a domain that appeared in the search results; an API base URL must be on the provider's own domain. Names and texts are clipped. Entries without a confirmed website or API address are dropped. `keyRequired: false` from the AI is ignored, because only a real test can say "no key needed". | `publicHttpsUrl`, `validate` |
-| **Safe auto-tests (no SSRF):** only public https hosts; `localhost`, `.local`, `.internal` and IP literals are refused. Redirects aren't followed. Timeouts are 8 s for the model list and 20 s for the chat. Responses are capped at 256 KB. At most 6 tests per run. The prompt is a fixed "pong", so no visitor data is sent. | `testKeyless`, `readCapped` |
+| **Safe auto-tests (no SSRF):** only public https hosts; `localhost`, `.local`, `.internal` and IP literals (including decimal and hex forms) are refused. Redirects aren't followed. Timeouts are 8 s for the model list and 20 s for the chat. Responses are read in pieces and cut off at 256 KB. Cloudflare Workers can't reach private networks anyway. At most 6 tests per run. The prompt is a fixed "pong", so no visitor data is sent. | `testKeyless`, `readCapped` |
 | **Quota and abuse control:** results are cached in KV and shared by everyone. A new live run happens at most once an hour, and a KV lock prevents parallel runs. Only API keys may `force` a run. | `runDiscovery`, `LIVE_MIN_INTERVAL_MS` |
 | **Safe rendering:** the page builds every card with `textContent`; links pass an `https` check and get `rel="noopener noreferrer nofollow"`. Web-found providers are labelled **unverified**, with their sources. | `site/home.js` (`el`, `link`) |
 | **Community models are opt-in:** a keyless provider that passed the test can be *chosen* as `community/<id>/<model>`, but it's never part of **Automatic**. The website may only use the tested model. Calls re-check the URL and don't follow redirects. | `chat()` community branch, `communityRunner` |
@@ -137,7 +140,8 @@ The live web search treats everything it reads as hostile.
 
 - **Minimal permissions:** `contents: write` to commit `providers.json`, and `actions: write` to re-enable its own schedule. Nothing else.
 - **One secret** (`SEARCH_CHAT_API_KEY`). Provider keys stay in Cloudflare; models are tested **through** the Worker (`strict: true`).
-- **Only official actions** (`actions/checkout`, `actions/setup-node`). For stricter supply-chain hygiene, pin them to commit SHAs instead of `@v4`.
+- **Only official actions** (`actions/checkout`, `actions/setup-node`), **pinned to commit SHAs**, so a moved tag can't change what runs. To update them, look up the new commit for the tag and replace the SHA.
+- **Docker images** use moving tags (`searxng/searxng:latest`, `nginx:1-alpine`, `cloudflare/cloudflared:latest`), so `docker compose pull` picks up security fixes. The trade-off is that an update is not reviewed first; pin digests if you prefer control over freshness.
 - **Only vetted providers are scanned** (the `PROVIDERS` list in `discover.mjs`). Discovery never adds a new provider; adding one is a manual code change.
 
 ---
@@ -152,6 +156,7 @@ The live web search treats everything it reads as hostile.
 - server-side sources and key-only features
 - the URL safety rules for discovery (private and IP hosts, credentials, ports) and link validation against search results
 - the hourly and budget limits, visitors not being able to force a run, community model restrictions, and the SearXNG key header
+- prototype-key ids (`__proto__`), the `nosniff` header, and cut-off reading of huge auto-test responses
 
 Run it after every change to the Worker.
 

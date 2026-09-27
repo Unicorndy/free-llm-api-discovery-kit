@@ -1,4 +1,8 @@
 'use strict';
+// Don't run inside another site's frame (clickjacking): break out, or hide the page if that's blocked.
+if (window.top !== window.self) {
+  try { window.top.location.replace(window.location.href); } catch { document.documentElement.style.display = 'none'; }
+}
 
 /* ============================================================
    Search Chat — static, GitHub Pages–friendly LLM chat with

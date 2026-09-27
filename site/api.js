@@ -1,4 +1,8 @@
 // API guide page: fills in this site's server URL, adds copy buttons, shows live status.
+// Don't run inside another site's frame (clickjacking): break out, or hide the page if that's blocked.
+if (window.top !== window.self) {
+  try { window.top.location.replace(window.location.href); } catch { document.documentElement.style.display = 'none'; }
+}
 (() => {
   const CONFIG = window.SEARCH_CHAT_CONFIG || {};
   const server = /^https:\/\//.test(CONFIG.workerUrl || '') ? CONFIG.workerUrl.replace(/\/+$/, '') : '';

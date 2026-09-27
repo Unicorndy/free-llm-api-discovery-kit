@@ -169,6 +169,33 @@ test('the website cannot use strict mode, unchecked models or provider lists', a
   assert.equal(b.res.status, 200);
 });
 
+test('prototype keys like __proto__ never crash the server', async () => {
+  for (const id of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+    const r = await call(`/v1/provider-models?provider=${id}`, { method: 'GET', origin: null, key: API_KEY });
+    assert.equal(r.res.status, 404, id);
+    const c = await call('/v1/chat/completions', { origin: null, key: API_KEY, body: { ...msg('hi'), model: `${id}/x`, strict: true } });
+    assert.equal(c.res.status, 400, id);
+  }
+});
+
+test('JSON responses carry nosniff', async () => {
+  const { res } = await call('/health', { method: 'GET', origin: null });
+  assert.equal(res.headers.get('X-Content-Type-Options'), 'nosniff');
+});
+
+test('keyless auto-tests stop reading huge responses', async () => {
+  const { testKeyless } = await import('../discover.js');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => String(url).endsWith('/models')
+    ? new Response(new ReadableStream({ start(c) { for (let i = 0; i < 100; i++) c.enqueue(new Uint8Array(8192).fill(97)); c.close(); } }))
+    : realFetch(url);
+  try {
+    const r = await testKeyless('https://huge.example/v1');
+    assert.equal(r.status, 'failed');
+    assert.match(r.error, /too large/);
+  } finally { globalThis.fetch = realFetch; }
+});
+
 test('unknown community providers are refused', async () => {
   const a = await call('/chat', { body: { ...msg('hi'), model: 'community/evil.example/model' } });
   assert.equal(a.res.status, 400);

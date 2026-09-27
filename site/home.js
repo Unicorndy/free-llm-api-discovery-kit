@@ -2,6 +2,10 @@
 // Data: directory.json (curated providers), providers.json (daily model tests), SERVER/discoveries (web search).
 // Everything from the network is rendered with textContent; links must be https. API keys typed here are
 // sent only from this browser to the provider being tested and are never stored.
+// Don't run inside another site's frame (clickjacking): break out, or hide the page if that's blocked.
+if (window.top !== window.self) {
+  try { window.top.location.replace(window.location.href); } catch { document.documentElement.style.display = 'none'; }
+}
 (() => {
   const CONFIG = window.SEARCH_CHAT_CONFIG || {};
   const SERVER = /^https:\/\//.test(CONFIG.workerUrl || '') ? CONFIG.workerUrl.replace(/\/+$/, '') : '';

@@ -234,9 +234,21 @@ function validate(items, results) {
 async function readCapped(res, limit = 262144) {
   const len = Number(res.headers.get('Content-Length') || 0);
   if (len > limit) throw new Error('response too large');
-  const text = await res.text();
-  if (text.length > limit) throw new Error('response too large');
-  return text;
+  // Read in pieces and stop at the cap, even when the server sends no Content-Length.
+  const reader = res.body.getReader();
+  const parts = [];
+  let size = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) { await reader.cancel().catch(() => {}); throw new Error('response too large'); }
+    parts.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) { bytes.set(p, at); at += p.byteLength; }
+  return new TextDecoder().decode(bytes);
 }
 
 // Test an OpenAI-compatible endpoint without any key: list models, then ask one for "pong".

@@ -110,7 +110,7 @@ const PROVIDERS = {
 
 function configuredProviders(env) {
   return cfg(env, 'PROVIDER_ORDER').split(',').map((s) => s.trim())
-    .filter((id) => PROVIDERS[id] && PROVIDERS[id].ready(env))
+    .filter((id) => Object.hasOwn(PROVIDERS, id) && PROVIDERS[id].ready(env))
     .map((id) => ({ id, ...PROVIDERS[id] }));
 }
 
@@ -360,7 +360,8 @@ async function listModels(env) {
 }
 
 async function providerModels(env, id) {
-  const p = PROVIDERS[id];
+  // hasOwn: ids like "__proto__" or "constructor" must not reach Object.prototype.
+  const p = Object.hasOwn(PROVIDERS, id) ? PROVIDERS[id] : null;
   if (!p || !p.ready(env)) throw new HttpError(404, 'That provider is not set up on this server.');
   if (!p.list) throw new HttpError(404, 'This provider has a public model list; fetch it directly.');
   return { provider: id, models: await p.list(env) };
@@ -519,7 +520,7 @@ const ROUTES = {
 function json(data, status, headers) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers },
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers },
   });
 }
 
