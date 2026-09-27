@@ -25,7 +25,7 @@ To run your own copy on your own GitHub and Cloudflare accounts, follow **[SETUP
  └───────┬──────────────────────────────┬──────────────────────────────┬────────────────────┘
          │ chat                         │ search                        │ results
          ▼                              ▼                               ▼
-   Workers AI · Groq ·           Tunnel → Caddy (key check) →      KV "DISCOVERY"
+   Workers AI · Groq ·           Tunnel → nginx (key + rate) →     KV "DISCOVERY"
    OpenRouter · NVIDIA ·         SearXNG (your server, Docker,     (shared by all visitors)
    community/* (opt-in)          no open ports) · Tavily fallback
 ```
@@ -56,6 +56,15 @@ Each provider card has a **setup guide**: sign up, get a key, curl/Python/JavaSc
 **Files**
 
 | Path | Purpose |
+| --- | --- |
+| `site/index.html`, `home.js`, `home.css`, `directory.json` | Discovery home page and the curated provider directory |
+| `site/chat.html`, `app.js`, `style.css` | Test chat. `config.js` holds the Worker URL |
+| `site/api.html`, `api.js`, `api.css` | API guide page with a live free-model list |
+| `site/scripts/discover.mjs`, `site/.github/workflows/discover.yml` | Daily model tests (only run in the site repo) |
+| `worker/worker.js`, `worker/discover.js`, `worker/wrangler.toml` | The Worker, the web discovery engine, and non-secret settings (incl. the KV binding) |
+| `searxng/` | Docker Compose stack: SearXNG, nginx gate (key check + rate limit), cloudflared. Settings and secrets in `searxng/.env` |
+| `SETUP.md`, `SECURITY.md` | Setup guide for your own accounts; security walkthrough |
+| `setup.mjs`, `lib/`, `ui/` | Original guided setup assistant (needs someone at a screen; predates discovery) |
 
 ---
 
