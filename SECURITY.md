@@ -1,0 +1,162 @@
+# Security
+
+This page explains how the code protects keys, users and your free quotas, where each protection lives, and what it does **not** protect against. Line numbers are approximate; search for the function name if the code has moved.
+
+## Threat model in one paragraph
+
+The site is a **free public service**, so anyone may use the chat. The things worth protecting are:
+
+1. **Your provider keys and other secrets:** they must never reach a browser, a repo or a log.
+2. **Your free quotas:** strangers shouldn't be able to drain them faster than a normal visitor.
+3. **Visitors:** a malicious model reply or web page mustn't run code in their browser.
+4. **Your server:** the SearXNG machine must not be open to the internet.
+5. **Discovery results:** web pages and AI output are untrusted. They mustn't turn into phishing links, scripts, or requests to internal addresses.
+
+The design assumes that **anything in the site repo or the browser is public**.
+
+---
+
+## 1. Where secrets live (and why they can't leak)
+
+| Secret | Lives in | Never in |
+| --- | --- | --- |
+| `GROQ_KEY`, `OPENROUTER_KEY`, `NVIDIA_KEY`, `TAVILY_KEY` | Cloudflare **Worker secrets** (encrypted at rest, write-only in the dashboard) | Repo, website, responses, logs |
+| `API_KEYS` (your API keys) | Worker secret; your copy in `~/.config/search-chat/api-key` (mode 600); GitHub Actions secret `SEARCH_CHAT_API_KEY` | Repo, website |
+| `SEARXNG_KEY` | Worker secret; `searxng/.env` (mode 600, gitignored) | Repo, website |
+| `SEARXNG_SECRET`, tunnel credentials | `searxng/.env`, `~/.cloudflared/` | Repo |
+| Cloudflare / GitHub CLI tokens | Your shell profile (mode 600) / `~/.config/gh/hosts.yml` | Repo |
+
+How the code keeps them there:
+
+- **The Worker reads secrets only from `env`** and uses them only in outgoing `fetch` headers:
+  - Provider calls: `openAICompatible` and `listOpenAIModels` (`worker/worker.js` ~L116–L135).
+  - SearXNG: `searchSearxng` (~L328).
+- **Responses never include `env` values.** `/health` returns only provider **names**, model ids and booleans (`worker/worker.js` ~L476–L490). Error messages are fixed strings or provider status codes (`HttpError`); unexpected errors are logged and the client gets a generic message (~L520).
+- **`.gitignore`** excludes `searxng/.env`, `.wrangler/`, `node_modules/`, `.browser-profile/`, `.claude/settings.local.json` and `.playwright-mcp/`.
+- **The discovery job** (`site/scripts/discover.mjs`) reads the key from `process.env` and only puts it in an `Authorization` header. It never prints it, and GitHub masks secrets in Actions logs anyway. It writes only model ids, timings and provider error text to `providers.json`.
+- **Visitors' own keys** (OpenRouter or a custom endpoint in Settings) stay in their browser:
+  - They're kept in `sessionStorage`, or in `localStorage` if the visitor ticks "Remember" (`site/app.js` `loadKey`/`saveKey`, ~L94–L104).
+  - They're sent only to the provider the visitor chose, with `credentials: 'omit'`.
+
+**What is public on purpose:** all of `site/`, including the Worker URL in `config.js`; `providers.json`; `/health`; and the SearXNG hostname. None of these grant access to anything.
+
+---
+
+## 2. Who can call the server
+
+`worker/worker.js`, in the `fetch` handler (~L462–L525):
+
+| Check | Code | Effect |
+| --- | --- | --- |
+| **Origin lock** | `isAllowedOrigin` (~L406) | Only `ALLOWED_ORIGIN` (your github.io site) gets CORS headers. Browsers on any other site can't call `/chat` or `/search`. Preflight (`OPTIONS`) from other origins gets 403 (~L474). |
+| **API keys** | `validApiKey` (~L412) | `Authorization: Bearer <key>` is compared with every key in `API_KEYS` using **`crypto.subtle.timingSafeEqual`** (~L419), so response timing doesn't reveal how much of a key matched. A wrong key gets 401, and no key and no allowed origin gets 403 (~L498). |
+| **Route allow-list** | `ROUTES` (~L443) | Only listed method and path pairs exist. Everything else gets 404 before any work is done. |
+| **Key-only features** | `chat(..., trusted)` (~L216–L260), `provider-models` (~L508) | Only API-key callers may use `strict`, try **arbitrary** model ids, or list a provider's models. The website may only pick models that discovery has checked (~L240), so it can't be used to run expensive or unexpected models. |
+
+**Important limit:** the `Origin` header proves nothing outside a browser. A script can send `Origin: https://<you>.github.io` and use `/chat` like a visitor. That's accepted for a public free site. Such a script still hits the per-IP rate limit and can't reach any key-only feature.
+
+---
+
+## 3. Protecting your free quotas
+
+| Protection | Code |
+| --- | --- |
+| **Rate limit:** 15 requests a minute per visitor IP, 30 per API key | `withinRateLimit` (~L394), `RATE_LIMIT_PER_MIN` / `API_RATE_LIMIT_PER_MIN` (~L38) |
+| **Request size:** 64 KB body cap, checked before and after reading | `MAX_BODY` (~L40), `readJson` (~L192) |
+| **Conversation shape:** at most 40 messages; roles limited to system/user/assistant; 12,000 characters each and 60,000 in total | `cleanMessages` (~L200) |
+| **Search rationing:** Tavily (1,000 credits a month) runs only for time-sensitive questions, and only when SearXNG returns fewer than 3 results. Results are cached for an hour. | `search` (~L367–L390) |
+| **Browser-side limits:** a 4-second cooldown and 2,000-character messages | `COOLDOWN_MS`, `MAX_INPUT` (`site/app.js` ~L9–L10) |
+| **Discovery budget:** a capped number of tests per provider per run; OpenRouter gets only 8 (its free tier allows 50 a day), spaced to stay under the API rate limit | `PROVIDERS[].limit`, `WORKER_SPACING_MS` in `discover.mjs` |
+
+**Limit:** the rate-limit counters live in memory **per Worker instance**, so they aren't global. Many IPs, or traffic spread across data centers, can still use up a provider's daily quota; the next provider then takes over. For hard global limits, add Cloudflare's [Rate Limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) or [Turnstile](https://developers.cloudflare.com/turnstile/).
+
+---
+
+## 4. Protecting visitors (the browser side)
+
+| Protection | Code |
+| --- | --- |
+| **Strict Content-Security-Policy:** only the site's own scripts run (no inline scripts, no `eval`); network calls must be same-origin or HTTPS; no plugins, no `<base>` changes, no form posts | `<meta http-equiv="Content-Security-Policy">` in `site/index.html` and `site/api.html` (line 7) |
+| **Escape first, then add a little Markdown:** model output is fully HTML-escaped, and only then are a few safe tags added (code, bold, italic, links, lists) | `escapeHtml` (~L353), `renderInline` (~L356), `renderMarkdown` (~L403) in `site/app.js` |
+| **Safe links:** Markdown links must match `https?://`, so `javascript:` and `data:` URLs can't become links. Every link gets `target="_blank" rel="noopener noreferrer nofollow"`. Search result URLs go through `safeUrl`, which allows only http(s). | `renderInline`, `safeUrl` (~L130) |
+| **`innerHTML` only with escaped output:** the only `innerHTML` writes use `renderMarkdown` output (~L618, ~L644). Everything else, including the API page's model list, is built with `textContent`. | `site/app.js`, `site/api.js` |
+| **Prompt-injection guard:** web results are sent under a heading that labels them untrusted, and the system prompt tells the model to ignore instructions inside them | `site/app.js` ~L263 and ~L606 |
+| **Safety check:** Llama Guard screens each question before any provider sees it; a refusal comes back as a normal reply | `isUnsafe` (`worker/worker.js` ~L174) |
+
+**Limits:**
+- **The safety check fails open** (~L185): if Workers AI is down, questions go through, and the system prompt and providers' own moderation still apply.
+- **No filter is perfect:** keep the on-page disclaimer.
+- **Visitors' messages go to third-party AI providers:** the page tells them not to share private information, and `providers.json` records each provider's known data-training policy.
+
+---
+
+## 5. Protecting the SearXNG server
+
+| Protection | Where |
+| --- | --- |
+| **No open ports:** the Compose file publishes no host ports. The only way in is the outbound Cloudflare Tunnel run by the `cloudflared` container. | `searxng/docker-compose.yml` |
+| **Key gate:** Caddy forwards to SearXNG only when the `X-Search-Key` header matches `SEARXNG_KEY`; everything else gets 403. The Caddy admin API is off. | `searxng/Caddyfile` |
+| **Random 256-bit secrets:** `SEARXNG_KEY` and `SEARXNG_SECRET` come from `openssl rand -hex 32` and live in `.env` (mode 600) | `SETUP.md` step 9 |
+| **Least privilege:** `cloudflared` runs as your user id, not root, and mounts only the one tunnel credentials file, read-only | `docker-compose.yml` (`user:`, `:ro`) |
+| **Resource cap:** SearXNG is limited to 1 GB of memory | `mem_limit` |
+| **Bot limiter off on purpose:** access is already restricted to the Worker, so SearXNG's own limiter isn't needed | `searxng/settings.yml` |
+
+**Limits:**
+- **Caddy's header check** is a plain string comparison. With a 256-bit random key sent over TLS, that's not practically exploitable.
+- **SearXNG queries search engines from your server's IP.** Some engines rate-limit or show CAPTCHAs to data-center IPs, and some forbid automated querying in their terms.
+- **Keep the host itself patched** (SSH, OS updates, firewall).
+
+---
+
+## 6. Web discovery (worker/discover.js)
+
+The live web search treats everything it reads as hostile.
+
+| Protection | Code |
+| --- | --- |
+| **Untrusted input, labelled as such:** search results go to the AI as data, and the system prompt says to ignore instructions inside them | `extractProviders` |
+| **Strict output validation:** every AI-provided link must be `https` with no credentials, no custom port and no IP literal. It must be on a domain that appeared in the search results; an API base URL must be on the provider's own domain. Names and texts are clipped. Entries without a confirmed website or API address are dropped. `keyRequired: false` from the AI is ignored, because only a real test can say "no key needed". | `publicHttpsUrl`, `validate` |
+| **Safe auto-tests (no SSRF):** only public https hosts; `localhost`, `.local`, `.internal` and IP literals are refused. Redirects aren't followed. Timeouts are 8 s for the model list and 20 s for the chat. Responses are capped at 256 KB. At most 6 tests per run. The prompt is a fixed "pong", so no visitor data is sent. | `testKeyless`, `readCapped` |
+| **Quota and abuse control:** results are cached in KV and shared by everyone. A new live run happens at most once an hour, and a KV lock prevents parallel runs. Only API keys may `force` a run. | `runDiscovery`, `LIVE_MIN_INTERVAL_MS` |
+| **Safe rendering:** the page builds every card with `textContent`; links pass an `https` check and get `rel="noopener noreferrer nofollow"`. Web-found providers are labelled **unverified**, with their sources. | `site/home.js` (`el`, `link`) |
+| **Community models are opt-in:** a keyless provider that passed the test can be *chosen* as `community/<id>/<model>`, but it's never part of **Automatic**. The website may only use the tested model. Calls re-check the URL and don't follow redirects. | `chat()` community branch, `communityRunner` |
+| **The browser key test keeps keys local:** the visitor's key goes straight from their browser to the provider (`credentials: 'omit'`, `referrerPolicy: 'no-referrer'`). It's never sent to this site and never stored. | `keyTest` in `site/home.js` |
+
+**Limits:**
+- **An AI can still be wrong about a real service's free tier.** Cards say "unverified", and the curated `directory.json` is the trusted source.
+- **A keyless service that passes the test could change later, or log prompts.** That's why community models are opt-in and marked as found on the web.
+
+## 7. The discovery workflow
+
+`site/.github/workflows/discover.yml`:
+
+- **Minimal permissions:** `contents: write` to commit `providers.json`, and `actions: write` to re-enable its own schedule. Nothing else.
+- **One secret** (`SEARCH_CHAT_API_KEY`). Provider keys stay in Cloudflare; models are tested **through** the Worker (`strict: true`).
+- **Only official actions** (`actions/checkout`, `actions/setup-node`). For stricter supply-chain hygiene, pin them to commit SHAs instead of `@v4`.
+- **Only vetted providers are scanned** (the `PROVIDERS` list in `discover.mjs`). Discovery never adds a new provider; adding one is a manual code change.
+
+---
+
+## 8. Checklist for your deployment
+
+- [ ] `ALLOWED_ORIGIN` is exactly your github.io origin.
+- [ ] No key is in any committed file: `git log -p | grep -E 'gsk_|sk-or-|nvapi-|tvly-|sc_[0-9a-f]{48}'` returns nothing, in **both** repos.
+- [ ] `searxng/.env`, `~/.config/search-chat/api-key` and your shell profile are mode 600.
+- [ ] SearXNG hostname returns 403 without the key.
+- [ ] Each project using the API has its **own** key.
+- [ ] You haven't pasted tokens into chats, issues or screenshots. If you did, rotate them.
+
+## 9. Rotating a secret
+
+| Secret | Steps |
+| --- | --- |
+| Cloudflare token | dash.cloudflare.com/profile/api-tokens → **Roll** → update your shell profile |
+| API key | Generate a new one (`SETUP.md` step 6) → `wrangler secret put API_KEYS` → `gh secret set SEARCH_CHAT_API_KEY` → update your projects |
+| SearXNG key | New value in `searxng/.env` → `docker compose up -d` → `wrangler secret put SEARXNG_KEY` |
+| Provider key | Regenerate on the provider's site → update the Worker secret |
+| GitHub CLI token | github.com/settings/applications → revoke **GitHub CLI** → `gh auth login` |
+| Tunnel | `cloudflared tunnel delete searxng`, then recreate it (`SETUP.md` step 9) |
+
+## Reporting a problem
+
+If you find a vulnerability, please open a private security advisory on the repository rather than a public issue.

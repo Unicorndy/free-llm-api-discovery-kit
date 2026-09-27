@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Security: only this site's own scripts may run; network calls must use HTTPS; no plugins, no form posts. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="description" content="A free chat assistant that checks the web before it answers and cites its sources.">
+  <title>Test chat · Free LLM API Discovery</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔎</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="./">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="7" y="11" width="14" height="6" rx="1.5" class="mark-fill"/>
+        <circle cx="14" cy="14" r="9" fill="none" stroke="currentColor" stroke-width="3"/>
+        <path d="M21 21l7 7" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+      </svg>
+      <span>Free LLM APIs</span>
+    </a>
+    <button id="modelPill" class="pill" type="button" title="Change provider or model">Model</button>
+    <a class="ghost" href="./">Discover</a>
+    <button id="newChat" class="ghost" type="button">New chat</button>
+    <button id="openSettings" class="ghost" type="button">Settings</button>
+  </header>
+
+  <main id="log">
+    <div class="wrap" id="thread" aria-busy="false">
+      <section class="empty" id="empty">
+        <h1>Test the free models. It checks the web before answering.</h1>
+        <p>Free to use, no sign-up. Answers mark their sources so you can check them yourself.</p>
+        <div class="examples">
+          <button type="button" data-prompt="What is the James Webb Space Telescope and what has it discovered?">What has the James Webb Space Telescope discovered?</button>
+          <button type="button" data-prompt="Who founded the Red Cross and why?">Who founded the Red Cross, and why?</button>
+          <button type="button" data-prompt="How do mRNA vaccines work?">How do mRNA vaccines work?</button>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="composer">
+    <div class="wrap">
+      <div class="modes" role="radiogroup" aria-label="Web search">
+        <span class="modes-label">Web search</span>
+        <div class="seg">
+          <label><input type="radio" name="mode" value="auto"><span>Auto</span></label>
+          <label><input type="radio" name="mode" value="always"><span>Always</span></label>
+          <label><input type="radio" name="mode" value="off"><span>Off</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <label class="sr-only" for="input">Your message</label>
+        <textarea id="input" rows="1" maxlength="2000" placeholder="Ask anything…"></textarea>
+        <button id="send" class="send" type="button">Send</button>
+      </div>
+      <p id="notice" class="notice" role="status"></p>
+      <p class="fineprint">Answers can be wrong. Messages go to the AI provider chosen in Settings, so don't share private information. <a class="api-link" href="api.html">Use the API in your projects</a></p>
+    </div>
+  </footer>
+
+  <dialog id="settings" aria-labelledby="settingsTitle">
+    <div class="dlg-body">
+      <h2 id="settingsTitle">Settings</h2>
+
+      <div class="field">
+        <label for="provider">AI provider</label>
+        <select id="provider"></select>
+      </div>
+
+      <div class="field" id="baseUrlField" hidden>
+        <label for="baseUrl">Endpoint base URL</label>
+        <input id="baseUrl" type="url" placeholder="https://api.example.com/v1" autocomplete="off" spellcheck="false">
+        <p class="help" id="baseUrlHelp">Must start with https:// and support browser requests (CORS).</p>
+      </div>
+
+      <div class="field">
+        <label for="apiKey">API key</label>
+        <input id="apiKey" type="password" autocomplete="off" spellcheck="false">
+        <p class="help" id="keyHelp"></p>
+        <label class="check"><input type="checkbox" id="remember"> Remember key on this device</label>
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <label for="model">Model</label>
+          <button type="button" class="link" id="refreshModels">Find free models</button>
+        </div>
+        <select id="model"></select>
+        <input id="modelCustom" type="text" placeholder="Or type a model ID" autocomplete="off" spellcheck="false" aria-label="Custom model ID">
+        <p class="help" id="modelStatus" role="status"></p>
+      </div>
+    </div>
+    <div class="dlg-actions">
+      <button type="button" class="ghost" id="cancelSettings">Cancel</button>
+      <button type="button" class="primary" id="saveSettings">Save settings</button>
+    </div>
+  </dialog>
+
+  <script src="config.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>

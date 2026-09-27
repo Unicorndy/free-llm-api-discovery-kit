@@ -1,0 +1,306 @@
+{
+  "note": "Curated directory of free LLM API providers, researched Sept 2026. Free tiers change often: verify on the provider's site. Web discovery adds unlisted providers on top of this.",
+  "providers": [
+    {
+      "id": "groq",
+      "name": "Groq",
+      "aliases": [
+        "groq",
+        "groqcloud"
+      ],
+      "domains": [
+        "groq.com"
+      ],
+      "website": "https://groq.com",
+      "signupUrl": "https://console.groq.com",
+      "keyUrl": "https://console.groq.com/keys",
+      "docsUrl": "https://console.groq.com/docs",
+      "baseUrl": "https://api.groq.com/openai/v1",
+      "keyRequired": true,
+      "exampleModel": "llama-3.3-70b-versatile",
+      "freeTier": "Free tier with per-model limits: about 30 requests a minute and up to a few thousand a day.",
+      "quotaReset": "daily",
+      "trainsOnData": "no",
+      "browserCalls": "unknown",
+      "siteProvider": "groq"
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "aliases": [
+        "openrouter"
+      ],
+      "domains": [
+        "openrouter.ai"
+      ],
+      "website": "https://openrouter.ai",
+      "signupUrl": "https://openrouter.ai",
+      "keyUrl": "https://openrouter.ai/keys",
+      "docsUrl": "https://openrouter.ai/docs",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "keyRequired": true,
+      "exampleModel": "meta-llama/llama-3.3-70b-instruct:free",
+      "freeTier": "Models ending in \":free\": 20 requests a minute; 50 a day, or 1,000 a day after $10 of lifetime credit.",
+      "quotaReset": "daily",
+      "trainsOnData": "depends on the model: some free endpoints log or train on prompts",
+      "browserCalls": "yes",
+      "siteProvider": "openrouter"
+    },
+    {
+      "id": "gemini",
+      "name": "Google Gemini (AI Studio)",
+      "aliases": [
+        "gemini",
+        "google gemini",
+        "google ai studio",
+        "ai studio"
+      ],
+      "domains": [
+        "google.com",
+        "googleapis.com"
+      ],
+      "website": "https://ai.google.dev",
+      "signupUrl": "https://aistudio.google.com",
+      "keyUrl": "https://aistudio.google.com/apikey",
+      "docsUrl": "https://ai.google.dev/gemini-api/docs/openai",
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "keyRequired": true,
+      "exampleModel": "gemini-2.5-flash",
+      "freeTier": "Free tier with per-model request and token limits.",
+      "quotaReset": "daily",
+      "trainsOnData": "yes: free-tier prompts may be used to improve Google's products",
+      "browserCalls": "unknown"
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral AI",
+      "aliases": [
+        "mistral",
+        "mistral ai",
+        "la plateforme"
+      ],
+      "domains": [
+        "mistral.ai"
+      ],
+      "website": "https://mistral.ai",
+      "signupUrl": "https://console.mistral.ai",
+      "keyUrl": "https://console.mistral.ai/api-keys",
+      "docsUrl": "https://docs.mistral.ai",
+      "baseUrl": "https://api.mistral.ai/v1",
+      "keyRequired": true,
+      "exampleModel": "mistral-small-latest",
+      "freeTier": "Free \"Experiment\" plan with rate limits (needs phone verification).",
+      "quotaReset": "rate limited",
+      "trainsOnData": "unknown: check Mistral's terms for the free plan",
+      "browserCalls": "unknown"
+    },
+    {
+      "id": "cerebras",
+      "name": "Cerebras",
+      "aliases": [
+        "cerebras",
+        "cerebras inference"
+      ],
+      "domains": [
+        "cerebras.ai"
+      ],
+      "website": "https://www.cerebras.ai",
+      "signupUrl": "https://cloud.cerebras.ai",
+      "keyUrl": "https://cloud.cerebras.ai",
+      "docsUrl": "https://inference-docs.cerebras.ai",
+      "baseUrl": "https://api.cerebras.ai/v1",
+      "keyRequired": true,
+      "exampleModel": "llama-3.3-70b",
+      "freeTier": "Free tier with daily token and per-minute request limits.",
+      "quotaReset": "daily",
+      "trainsOnData": "unknown",
+      "browserCalls": "unknown"
+    },
+    {
+      "id": "huggingface",
+      "name": "Hugging Face Inference Providers",
+      "aliases": [
+        "hugging face",
+        "huggingface",
+        "hf inference"
+      ],
+      "domains": [
+        "huggingface.co"
+      ],
+      "website": "https://huggingface.co",
+      "signupUrl": "https://huggingface.co/join",
+      "keyUrl": "https://huggingface.co/settings/tokens",
+      "docsUrl": "https://huggingface.co/docs/inference-providers",
+      "baseUrl": "https://router.huggingface.co/v1",
+      "keyRequired": true,
+      "exampleModel": "openai/gpt-oss-120b",
+      "freeTier": "A small amount of free monthly credit across many hosted models.",
+      "quotaReset": "monthly",
+      "trainsOnData": "unknown: depends on the underlying provider",
+      "browserCalls": "unknown"
+    },
+    {
+      "id": "github-models",
+      "name": "GitHub Models",
+      "aliases": [
+        "github models",
+        "github"
+      ],
+      "domains": [
+        "github.com",
+        "github.ai"
+      ],
+      "website": "https://github.com/marketplace/models",
+      "signupUrl": "https://github.com/signup",
+      "keyUrl": "https://github.com/settings/personal-access-tokens",
+      "docsUrl": "https://docs.github.com/en/github-models",
+      "baseUrl": "https://models.github.ai/inference",
+      "keyRequired": true,
+      "exampleModel": "openai/gpt-4.1-mini",
+      "freeTier": "Free for prototyping, with per-model daily request limits. Use a token with the \"models: read\" permission.",
+      "quotaReset": "daily",
+      "trainsOnData": "no",
+      "browserCalls": "unknown"
+    },
+    {
+      "id": "nvidia",
+      "name": "NVIDIA NIM",
+      "aliases": [
+        "nvidia",
+        "nvidia nim",
+        "nim",
+        "build.nvidia.com"
+      ],
+      "domains": [
+        "nvidia.com"
+      ],
+      "website": "https://build.nvidia.com",
+      "signupUrl": "https://build.nvidia.com",
+      "keyUrl": "https://build.nvidia.com",
+      "docsUrl": "https://docs.api.nvidia.com",
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "keyRequired": true,
+      "exampleModel": "meta/llama-3.3-70b-instruct",
+      "freeTier": "Free trial credits for prototyping, about 40 requests a minute.",
+      "quotaReset": "none: one-time credits",
+      "trainsOnData": "unknown",
+      "browserCalls": "no",
+      "siteProvider": "nvidia"
+    },
+    {
+      "id": "workers-ai",
+      "name": "Cloudflare Workers AI",
+      "aliases": [
+        "cloudflare",
+        "workers ai",
+        "cloudflare workers ai"
+      ],
+      "domains": [
+        "cloudflare.com"
+      ],
+      "website": "https://developers.cloudflare.com/workers-ai/",
+      "signupUrl": "https://dash.cloudflare.com/sign-up",
+      "keyUrl": "https://dash.cloudflare.com/profile/api-tokens",
+      "docsUrl": "https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/",
+      "baseUrl": "https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/v1",
+      "keyRequired": true,
+      "exampleModel": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "freeTier": "10,000 neurons a day on the free plan. Some newer models are paid-plan only.",
+      "quotaReset": "daily",
+      "trainsOnData": "no",
+      "browserCalls": "no",
+      "siteProvider": "workers-ai",
+      "keyHint": "Create an API token with the \"Workers AI\" template, and put your account ID into the base URL."
+    },
+    {
+      "id": "cohere",
+      "name": "Cohere",
+      "aliases": [
+        "cohere"
+      ],
+      "domains": [
+        "cohere.com",
+        "cohere.ai"
+      ],
+      "website": "https://cohere.com",
+      "signupUrl": "https://dashboard.cohere.com",
+      "keyUrl": "https://dashboard.cohere.com/api-keys",
+      "docsUrl": "https://docs.cohere.com/docs/compatibility-api",
+      "baseUrl": "https://api.cohere.ai/compatibility/v1",
+      "keyRequired": true,
+      "exampleModel": "command-a-03-2025",
+      "freeTier": "Trial key: about 1,000 calls a month, not for production use.",
+      "quotaReset": "monthly",
+      "trainsOnData": "unknown",
+      "browserCalls": "unknown"
+    },
+    {
+      "id": "sambanova",
+      "name": "SambaNova Cloud",
+      "aliases": [
+        "sambanova",
+        "samba nova"
+      ],
+      "domains": [
+        "sambanova.ai"
+      ],
+      "website": "https://sambanova.ai",
+      "signupUrl": "https://cloud.sambanova.ai",
+      "keyUrl": "https://cloud.sambanova.ai/apis",
+      "docsUrl": "https://docs.sambanova.ai",
+      "baseUrl": "https://api.sambanova.ai/v1",
+      "keyRequired": true,
+      "exampleModel": "Meta-Llama-3.3-70B-Instruct",
+      "freeTier": "Free tier with rate limits.",
+      "quotaReset": "rate limited",
+      "trainsOnData": "unknown",
+      "browserCalls": "unknown"
+    },
+    {
+      "id": "pollinations",
+      "name": "Pollinations",
+      "aliases": [
+        "pollinations",
+        "pollinations.ai"
+      ],
+      "domains": [
+        "pollinations.ai"
+      ],
+      "website": "https://pollinations.ai",
+      "signupUrl": "https://enter.pollinations.ai",
+      "keyUrl": "https://enter.pollinations.ai",
+      "docsUrl": "https://github.com/pollinations/pollinations",
+      "baseUrl": "https://text.pollinations.ai",
+      "chatUrl": "https://text.pollinations.ai/openai",
+      "keyRequired": false,
+      "exampleModel": "openai-fast",
+      "freeTier": "Anonymous access with no key and rate limits; a free key gives more.",
+      "quotaReset": "rate limited",
+      "trainsOnData": "unknown",
+      "browserCalls": "yes",
+      "siteProvider": "pollinations"
+    },
+    {
+      "id": "llm7",
+      "name": "LLM7.io",
+      "aliases": [
+        "llm7",
+        "llm7.io"
+      ],
+      "domains": [
+        "llm7.io"
+      ],
+      "website": "https://llm7.io",
+      "signupUrl": "https://token.llm7.io",
+      "keyUrl": "https://token.llm7.io",
+      "docsUrl": "https://llm7.io",
+      "baseUrl": "https://api.llm7.io/v1",
+      "keyRequired": true,
+      "exampleModel": "gpt-4o-mini",
+      "freeTier": "Free with a token from token.llm7.io (checked Sept 2026: calls without a token are rejected).",
+      "quotaReset": "rate limited",
+      "trainsOnData": "unknown",
+      "browserCalls": "unknown"
+    }
+  ]
+}

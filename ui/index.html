@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Search Chat setup</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔎</text></svg>">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="7" y="11" width="14" height="6" rx="1.5" class="mark-fill"/>
+        <circle cx="14" cy="14" r="9" fill="none" stroke="currentColor" stroke-width="3"/>
+        <path d="M21 21l7 7" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+      </svg>
+      <span>Search Chat setup</span>
+    </div>
+    <span id="conn" class="conn" role="status">Connecting…</span>
+  </header>
+
+  <div class="layout">
+    <aside class="steps-panel" aria-label="Setup steps">
+      <ol id="steps" class="steps"></ol>
+    </aside>
+
+    <main class="feed" id="feed">
+      <section id="intro" class="intro">
+        <h1>Set up your free AI chat site, one step at a time.</h1>
+        <p>I'll open a browser window and go through each service with you. You sign in and press the final buttons. I fill in forms, pick up the keys, check they work, and deploy everything.</p>
+        <div class="facts">
+          <div>
+            <h2>You'll need</h2>
+            <p>Free GitHub and Cloudflare accounts (you can create them along the way) and about 15 minutes.</p>
+          </div>
+          <div>
+            <h2>I never</h2>
+            <ul>
+              <li>type your passwords or solve CAPTCHAs</li>
+              <li>accept terms of service for you</li>
+              <li>save keys to disk: they go straight to Cloudflare as encrypted secrets</li>
+            </ul>
+          </div>
+        </div>
+        <button id="start" class="primary big" type="button">Start setup</button>
+        <p id="noToken" class="warn-text" hidden>Open this page using the link printed in your terminal. It includes a private session code.</p>
+      </section>
+
+      <ol id="log" class="log" aria-live="polite"></ol>
+      <section id="results" class="results" hidden></section>
+      <div id="request" class="request" hidden></div>
+    </main>
+  </div>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

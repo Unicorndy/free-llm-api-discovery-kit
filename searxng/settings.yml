@@ -1,0 +1,21 @@
+# SearXNG settings. Everything not listed here uses SearXNG's defaults.
+# server.secret_key comes from the SEARXNG_SECRET env var (see docker-compose.yml).
+use_default_settings: true
+
+general:
+  instance_name: "Search Chat"
+
+server:
+  # Access is gated by Caddy's shared key, so SearXNG's bot limiter isn't needed.
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 1
+  formats:
+    - html
+    - json
+
+outgoing:
+  request_timeout: 4.0
+  max_request_timeout: 8.0

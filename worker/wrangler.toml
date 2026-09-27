@@ -1,0 +1,30 @@
+# Cloudflare Worker config for deploying from the CLI: npx wrangler deploy
+name = "search-chat"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# Workers AI (free daily allowance, no key needed)
+[ai]
+binding = "AI"
+
+# Web discovery results (shared by all visitors, refreshed at most hourly)
+[[kv_namespaces]]
+binding = "DISCOVERY"
+id = "YOUR_KV_NAMESPACE_ID"   # from: npx wrangler kv namespace create DISCOVERY
+
+[vars]
+# Only this site may call /chat and /search. Change to your GitHub Pages address.
+ALLOWED_ORIGIN = "https://YOUR-USERNAME.github.io"
+# Private SearXNG (see searxng/). Its key is a secret: npx wrangler secret put SEARXNG_KEY
+SEARXNG_URL = "https://search.example.com"
+# Daily model discovery results (written by the site repo's GitHub Action).
+CATALOG_URL = "https://YOUR-USERNAME.github.io/YOUR-SITE-REPO/providers.json"
+# Optional overrides:
+# PROVIDER_ORDER = "groq,workers-ai,openrouter,nvidia"
+
+# Keys are secrets, never put them here:
+#   npx wrangler secret put GROQ_KEY
+#   npx wrangler secret put OPENROUTER_KEY
+#   npx wrangler secret put NVIDIA_KEY
+#   npx wrangler secret put TAVILY_KEY
+#   npx wrangler secret put SEARXNG_KEY

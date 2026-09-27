@@ -1,0 +1,85 @@
+/* Discovery home page. Builds on style.css tokens and api.css doc layout. */
+.hero { padding: 8px 0 8px; }
+.hero h1 { margin-top: 36px; }
+.hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 8px 0 4px; }
+.primary.big { font-size: 1.1rem; padding: 12px 26px; border-radius: var(--radius-m); }
+.primary:disabled { opacity: .6; cursor: progress; }
+.small { font-size: .82rem; }
+
+.log {
+  list-style: none; margin: 14px 0 0; padding: 12px 14px; max-height: 220px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-m);
+  font-size: .88rem; display: grid; gap: 4px;
+}
+.log li { padding-left: 18px; position: relative; color: var(--muted); }
+.log li::before { content: ""; position: absolute; left: 2px; top: .55em; width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+.log li:last-child::before { background: var(--accent); }
+.log li.ok { color: var(--ink); }
+.log li.ok::before { background: var(--mark); }
+.log li.bad { color: var(--danger); }
+
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0 4px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-m); padding: 12px 14px; display: grid; }
+.stat strong { font-size: 1.6rem; line-height: 1.1; }
+.stat span { color: var(--muted); font-size: .82rem; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 0; }
+.chip {
+  padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  color: var(--accent); font-weight: 700; font-size: .88rem;
+}
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+.tag { font-size: .75rem; font-weight: 700; vertical-align: middle; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+
+.cards { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.pcard { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-m); padding: 14px 16px; }
+.pcard-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.pcard-head h3 { margin: 0; font-size: 1.1rem; }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.badge.warn { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+.badge:not(.on):not(.off):not(.warn) { border: 1px solid var(--line); color: var(--ink); }
+.ptier { margin: 8px 0 6px; }
+.ptier:empty { display: none; }
+.plinks { display: flex; flex-wrap: wrap; gap: 14px; font-weight: 700; font-size: .92rem; }
+.plinks a, .sources-line a { color: var(--accent); }
+.sources-line { margin: 8px 0 0; overflow-wrap: anywhere; }
+
+.guide { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.guide summary { cursor: pointer; font-weight: 700; color: var(--accent); }
+.guide .steps { margin-top: 12px; }
+.guide h4 { margin: 0 0 4px; font-size: 1rem; }
+
+.tabs { margin-top: 8px; }
+.tabbar { display: flex; gap: 6px; margin-bottom: 6px; }
+
+.keytest { display: grid; gap: 6px; }
+.kt-label { font-size: .8rem; font-weight: 700; color: var(--muted); }
+.keytest input {
+  width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--radius-s);
+  background: var(--bg); font-family: var(--mono); font-size: .88rem;
+}
+.kt-row { display: flex; gap: 8px; margin-top: 6px; }
+.kt-row input { flex: 1; min-width: 0; }
+.test-out { margin: 4px 0 0; font-size: .92rem; }
+.test-out:empty { display: none; }
+.test-out.ok { color: inherit; border-left: 3px solid var(--mark); padding-left: 10px; }
+.test-out.bad { color: var(--danger); border-left: 3px solid var(--danger); padding-left: 10px; }
+
+a.as-button { display: inline-block; text-decoration: none; }
+
+.ready { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 6px; }
+.ready li {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 12px;
+  font-size: .92rem; overflow-wrap: anywhere;
+}
+.ready .try { font-weight: 700; color: var(--accent); white-space: nowrap; }
+
+@media (max-width: 560px) {
+  .stats { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .stat { padding: 10px; }
+  .stat strong { font-size: 1.3rem; }
+  .kt-row { flex-direction: column; }
+}
+.guide, .guide-body, .steps li, .tabs, .keytest { min-width: 0; }

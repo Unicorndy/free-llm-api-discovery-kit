@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Security: only this site's own scripts may run; network calls must be same-origin or HTTPS; no plugins, no form posts. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="description" content="Find free LLM APIs: a live web search plus a daily-tested catalog, with setup guides and a key test that runs in your browser.">
+  <title>Free LLM API Discovery</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔎</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="api.css">
+  <link rel="stylesheet" href="home.css">
+</head>
+<body class="doc">
+  <header class="top">
+    <a class="brand" href="./">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="7" y="11" width="14" height="6" rx="1.5" class="mark-fill"/>
+        <circle cx="14" cy="14" r="9" fill="none" stroke="currentColor" stroke-width="3"/>
+        <path d="M21 21l7 7" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+      </svg>
+      <span>Free LLM APIs</span>
+    </a>
+    <a class="ghost" href="chat.html">Test chat</a>
+    <a class="ghost" href="api.html">API</a>
+  </header>
+
+  <main class="doc-main">
+    <div class="wrap">
+      <section class="hero">
+        <h1>Find free LLM APIs</h1>
+        <p class="lede">Searches the web for AI model APIs you can use for free, tests the ones that need no key, and shows you how to set each one up. The list below is also checked every day.</p>
+        <div class="hero-actions">
+          <button id="runDiscovery" class="primary big" type="button">Run discovery</button>
+          <span class="muted" id="lastRun"></span>
+        </div>
+        <ol class="log" id="log" aria-live="polite" hidden></ol>
+        <div class="stats" id="stats"></div>
+      </section>
+
+      <div class="filters" role="group" aria-label="Filter providers">
+        <button type="button" class="chip on" data-filter="all">All</button>
+        <button type="button" class="chip" data-filter="keyless">No key needed</button>
+        <button type="button" class="chip" data-filter="working">Working now</button>
+        <button type="button" class="chip" data-filter="private">Doesn't train on your data</button>
+      </div>
+
+      <section id="known">
+        <h2>Free providers and how to set them up</h2>
+        <p class="muted">Official links and API details are curated. Badges show what today's checks found.</p>
+        <div id="knownList" class="cards"></div>
+      </section>
+
+      <section id="web">
+        <h2>New on the web <span class="tag">unverified</span></h2>
+        <p class="muted">Found by the latest web search and read by an AI. Keyless ones are tested automatically. Check their terms before sending anything private.</p>
+        <div id="webList" class="cards"></div>
+      </section>
+
+      <section id="ready">
+        <h2>Ready to use on this site</h2>
+        <p class="muted">Models that passed today's test. Try one in the test chat, or call it from your own code through <a href="api.html">this site's API</a>.</p>
+        <div id="readyList"></div>
+      </section>
+    </div>
+  </main>
+
+  <template id="cardTpl">
+    <article class="pcard">
+      <div class="pcard-head">
+        <h3 class="pname"></h3>
+        <div class="badges"></div>
+      </div>
+      <p class="ptier"></p>
+      <div class="plinks"></div>
+      <details class="guide">
+        <summary>Setup guide</summary>
+        <div class="guide-body"></div>
+      </details>
+    </article>
+  </template>
+
+  <script src="config.js" defer></script>
+  <script src="home.js" defer></script>
+</body>
+</html>

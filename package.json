@@ -1,0 +1,15 @@
+{
+  "name": "search-chat-kit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Free AI chat site for GitHub Pages, a Cloudflare Worker site server, and a guided setup assistant.",
+  "scripts": {
+    "setup": "node setup.mjs",
+    "browser": "playwright install chromium"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "playwright": "^1.63.0"
+  }
+}

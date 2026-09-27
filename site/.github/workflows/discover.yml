@@ -1,0 +1,48 @@
+# Daily free-model discovery: lists and smoke-tests models from vetted providers, commits providers.json.
+# Needs one repo secret: SEARCH_CHAT_API_KEY (a key from the Worker's API_KEYS secret).
+name: Discover free models
+
+on:
+  schedule:
+    - cron: "17 3 * * *"   # daily, 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: discover
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Find and test free models
+        run: node scripts/discover.mjs
+        env:
+          SEARCH_CHAT_API_KEY: ${{ secrets.SEARCH_CHAT_API_KEY }}
+
+      - name: Commit providers.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add providers.json
+          if git diff --cached --quiet; then echo "No changes."; exit 0; fi
+          git commit -m "Update providers.json"
+          git push
+
+      # Scheduled workflows in public repos switch off after 60 days without activity; re-enabling resets that.
+      - name: Keep the schedule alive
+        if: always()
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/discover.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}

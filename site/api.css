@@ -1,0 +1,100 @@
+/* API guide page. Builds on style.css tokens. */
+body.doc { display: block; height: auto; min-height: 100%; }
+.doc .top { position: sticky; top: 0; z-index: 2; }
+.doc .brand { color: inherit; text-decoration: none; }
+.ghost { text-decoration: none; }
+
+.doc-main { padding: 8px 20px 64px; }
+.doc h1 {
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  line-height: 1.12; letter-spacing: -0.015em;
+  margin: 40px 0 12px; max-width: 20ch;
+}
+.lede { color: var(--muted); margin: 0 0 24px; max-width: 60ch; }
+.doc h2 { font-size: 1.4rem; margin: 48px 0 12px; padding-top: 8px; scroll-margin-top: 72px; }
+.doc h3 { font-size: 1.05rem; margin: 20px 0 8px; }
+.doc p, .doc li { max-width: 68ch; }
+.doc section { scroll-margin-top: 64px; }
+
+.facts {
+  display: grid; gap: 10px; padding: 14px 16px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-m);
+}
+.facts > div { display: grid; grid-template-columns: 5.5em 1fr; gap: 8px; align-items: baseline; min-width: 0; }
+.facts .k { color: var(--muted); font-size: .85rem; font-weight: 700; }
+.facts code { overflow-wrap: anywhere; }
+#liveStatus.ok { color: inherit; }
+#liveStatus.bad { color: var(--danger); }
+
+.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 0; }
+.toc a {
+  padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--accent); font-weight: 700; font-size: .9rem; text-decoration: none; background: var(--surface);
+}
+.toc a:hover { border-color: var(--accent); }
+
+.steps { padding-left: 1.3em; margin: 0; }
+.steps > li { margin: 0 0 20px; }
+.steps > li::marker { font-weight: 700; color: var(--accent); }
+.steps h3 { margin-top: 0; }
+.note {
+  font-size: .9rem; padding: 10px 12px; border-left: 3px solid var(--mark);
+  background: var(--surface); border-radius: 0 var(--radius-s) var(--radius-s) 0;
+}
+
+.doc code { font-family: var(--mono); font-size: .88em; }
+.doc :not(pre) > code {
+  background: var(--surface); border: 1px solid var(--line);
+  padding: 0 4px; border-radius: 4px; overflow-wrap: anywhere;
+}
+
+.code-block { position: relative; margin: 8px 0 16px; }
+.doc pre {
+  margin: 0; padding: 14px 16px; overflow-x: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-s);
+}
+.doc pre code { font-size: 14px; line-height: 1.55; white-space: pre; }
+.copy {
+  position: absolute; top: 8px; right: 8px;
+  padding: 2px 10px; font-size: .8rem; font-weight: 700;
+  color: var(--accent); background: var(--bg);
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+}
+.copy:hover { border-color: var(--accent); }
+
+.table-wrap { overflow-x: auto; margin: 8px 0 16px; }
+.doc table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+.doc th, .doc td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.doc th { font-size: .85rem; color: var(--muted); }
+.doc td:first-child { white-space: nowrap; }
+
+.api-link { color: var(--accent); font-weight: 700; }
+
+@media (max-width: 560px) {
+  .doc-main { padding: 8px 16px 48px; }
+  .doc pre code { font-size: 13px; }
+  .doc td:first-child { white-space: normal; }
+}
+
+/* Free models (filled from providers.json) */
+.muted { color: var(--muted); font-size: .9rem; }
+.provider {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-m);
+  padding: 14px 16px; margin: 12px 0;
+}
+.provider-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.provider-head h3 { margin: 0; }
+.badge { font-size: .78rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.badge.on { background: var(--mark); color: var(--mark-ink); }
+.badge.off { border: 1px solid var(--line); color: var(--muted); }
+.pfacts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 10px 0; font-size: .88rem; }
+.pfacts dt { color: var(--muted); font-weight: 700; }
+.pfacts dd { margin: 0; }
+.models { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
+.models li { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.models code { overflow-wrap: anywhere; font-size: .8rem; }
+.models .lat { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+@media (max-width: 560px) {
+  .pfacts { grid-template-columns: 1fr; gap: 0; }
+  .pfacts dd { margin-bottom: 6px; }
+}

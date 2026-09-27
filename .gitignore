@@ -1,0 +1,7 @@
+node_modules/
+.browser-profile/
+.env
+.claude/settings.local.json
+searxng/.env
+.wrangler/
+.playwright-mcp/
