@@ -140,3 +140,7 @@ curl https://search-chat.YOUR-SUBDOMAIN.workers.dev/v1/chat/completions \
 ## Setup assistant (original, optional)
 
 `npm install && npx playwright install chromium && npm run setup` opens a local guided assistant, on `127.0.0.1` with a session code. It collects keys in a real browser window and deploys everything. It needs someone physically at a screen; on this headless server, use the CLI steps above instead.
+
+## License
+
+[MIT](LICENSE)
