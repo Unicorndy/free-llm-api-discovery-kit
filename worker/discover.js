@@ -9,7 +9,10 @@
  * with textContent on the page. Auto-tests only call public https hosts, with timeouts and size caps.
  */
 
-export const LIVE_MIN_INTERVAL_MS = 3600e3; // a new live run at most once an hour (shared by everyone)
+// A new live run at most every DISCOVERY_INTERVAL_HOURS (default 6), shared by everyone.
+export const DEFAULT_INTERVAL_HOURS = 6;
+const intervalMs = (env) => Math.max(0.25, Number(env.DISCOVERY_INTERVAL_HOURS) || DEFAULT_INTERVAL_HOURS) * 3600e3;
+const agoText = (ms) => (ms < 3600e3 ? `${Math.round(ms / 60000)} minutes` : `${(ms / 3600e3).toFixed(1).replace(/\.0$/, '')} hours`);
 const LOCK_TTL_S = 300;
 const EXTRACT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const MAX_RESULTS = 48;
@@ -93,8 +96,9 @@ async function runDiscoveryOnce(env, { force = false, searchWeb, budget = async 
   if (!env.DISCOVERY) throw new Error('Discovery storage (KV) is not set up.');
   const previous = await latestDiscovery(env);
   const age = previous ? Date.now() - Date.parse(previous.at) : Infinity;
-  if (previous && age < LIVE_MIN_INTERVAL_MS && !force) {
-    emit({ type: 'status', message: `Showing the web search from ${Math.round(age / 60000)} minutes ago (it refreshes at most once an hour).` });
+  if (previous && age < intervalMs(env) && !force) {
+    const hours = intervalMs(env) / 3600e3;
+    emit({ type: 'status', message: `Showing the web search from ${agoText(age)} ago (it refreshes at most every ${hours} hours; next in about ${agoText(intervalMs(env) - age)}).` });
     emit({ type: 'result', data: previous, cached: true });
     return previous;
   }

@@ -7,7 +7,7 @@ compatibility_date = "2026-09-01"
 [ai]
 binding = "AI"
 
-# Web discovery results (shared by all visitors, refreshed at most hourly)
+# Web discovery results (shared by all visitors, refreshed at most every DISCOVERY_INTERVAL_HOURS)
 [[kv_namespaces]]
 binding = "DISCOVERY"
 id = "YOUR_KV_NAMESPACE_ID"   # from: npx wrangler kv namespace create DISCOVERY
@@ -21,6 +21,8 @@ SEARXNG_URL = "https://search.example.com"
 CATALOG_URL = "https://YOUR-USERNAME.github.io/YOUR-SITE-REPO/providers.json"
 # SearXNG searches a day across chat and discovery (approximate, counted in KV)
 SEARXNG_DAILY_LIMIT = "300"
+# Hours between live web discovery runs (shared by everyone; API keys can still force one)
+DISCOVERY_INTERVAL_HOURS = "6"
 # Optional overrides:
 # PROVIDER_ORDER = "groq,workers-ai,openrouter,nvidia"
 

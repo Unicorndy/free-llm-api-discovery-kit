@@ -321,7 +321,7 @@ test('discovery keeps only links on domains seen in the results, blocks private 
   assert.equal(await e.DISCOVERY.get('web:lock'), null, 'lock released');
 });
 
-test('discovery respects the hourly interval and the daily search budget', async () => {
+test('discovery respects the 6-hour interval and the daily search budget', async () => {
   const e = env();
   await e.DISCOVERY.put('web:latest', JSON.stringify({ at: new Date().toISOString(), providers: [] }));
   const events = [];
@@ -331,6 +331,22 @@ test('discovery respects the hourly interval and the daily search budget', async
   const ev2 = [];
   await runDiscovery(e2, { force: true, budget: async () => false, searchWeb: async () => { throw new Error('should not search'); }, emit: (x) => ev2.push(x) });
   assert.ok(ev2.some((x) => /budget/.test(x.message || '')));
+});
+
+test('2-hour-old results are reused; 7-hour-old results trigger a new search (6-hour interval)', async () => {
+  const at = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+  for (const [hours, expectSearch] of [[2, false], [7, true]]) {
+    const e = env();
+    await e.DISCOVERY.put('web:latest', JSON.stringify({ at: at(hours), providers: [] }));
+    let searched = false;
+    await runDiscovery(e, { searchWeb: async () => { searched = true; return []; }, emit() {} }).catch(() => {}); // empty search throws; only whether it searched matters
+    assert.equal(searched, expectSearch, `${hours} h old`);
+  }
+  const e = env({ DISCOVERY_INTERVAL_HOURS: '1' });
+  await e.DISCOVERY.put('web:latest', JSON.stringify({ at: at(2), providers: [] }));
+  let searched = false;
+  await runDiscovery(e, { searchWeb: async () => { searched = true; return []; }, emit() {} }).catch(() => {}); // empty search throws; only whether it searched matters
+  assert.equal(searched, true, 'the interval is configurable');
 });
 
 test('site visitors cannot force a live discovery run', async () => {

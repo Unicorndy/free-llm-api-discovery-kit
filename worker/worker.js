@@ -11,7 +11,7 @@
  *   POST /v1/search             same as /search
  *
  * Free-API discovery (see discover.js):
- *   POST /discover       streams a web search for free LLM APIs (site; refreshes at most hourly)
+ *   POST /discover       streams a web search for free LLM APIs (site; refreshes at most every DISCOVERY_INTERVAL_HOURS, default 6)
  *   GET  /discoveries    the latest web discovery results (public, no secrets)
  *   POST /v1/discover    same as /discover; API keys may send {"force": true}
  *
@@ -23,6 +23,7 @@
  *   SEARXNG_KEY      secret sent as X-Search-Key; the instance rejects requests without it
  *   API_KEYS         secret, comma-separated keys that may call the API from anywhere
  *   SEARXNG_DAILY_LIMIT  SearXNG searches a day across chat and discovery (default 300; counted in KV)
+ *   DISCOVERY_INTERVAL_HOURS  hours between live web discovery runs (default 6)
  *   PROVIDER_ORDER, WORKERS_AI_MODEL, GROQ_MODEL, NVIDIA_MODEL, GUARD_MODEL   optional overrides
  */
 

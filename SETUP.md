@@ -83,7 +83,7 @@ npx wrangler kv namespace create DISCOVERY   # copy the printed id into wrangler
 npx wrangler deploy
 ```
 
-The `DISCOVERY` KV namespace stores the latest web discovery results, shared by all visitors. The free plan's KV limits are plenty, because a live search runs at most once an hour.
+The `DISCOVERY` KV namespace stores the latest web discovery results, shared by all visitors. The free plan's KV limits are plenty, because a live search runs at most every 6 hours (`DISCOVERY_INTERVAL_HOURS` in `wrangler.toml`).
 
 **First time only:** if wrangler says you need a `workers.dev` subdomain, pick one in the dashboard (Workers & Pages → your subdomain), or register it through the API:
 

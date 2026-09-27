@@ -21,7 +21,7 @@ To run your own copy on your own GitHub and Cloudflare accounts, follow **[SETUP
     ▼                                                             ▼
  ┌───────────────────────────── Cloudflare Worker "search-chat" ─────────────────────────────┐
  │ origin lock or API key · rate limits · size caps · Llama Guard · provider keys as secrets  │
- │ discover.js: web search → AI extraction → URL validation → keyless auto-test → KV (hourly) │
+ │ discover.js: web search → AI extraction → URL validation → keyless auto-test → KV (6-hourly)│
  └───────┬──────────────────────────────┬──────────────────────────────┬────────────────────┘
          │ chat                         │ search                        │ results
          ▼                              ▼                               ▼
@@ -39,7 +39,7 @@ To run your own copy on your own GitHub and Cloudflare accounts, follow **[SETUP
    - Workers AI reads the results and lists free LLM API providers.
    - Every link must be `https` and on a domain that appeared in the results; anything without a confirmed website or API address is dropped.
    - Keyless OpenAI-compatible endpoints are auto-tested with a "pong" prompt, with timeouts, size caps and redirects not followed.
-   - The result is stored in KV and shared by everyone. A new live run happens at most once an hour; within the hour the page shows the recent run.
+   - The result is stored in KV and shared by everyone. A new live run happens at most every 6 hours (`DISCOVERY_INTERVAL_HOURS`); in between, the page shows the most recent run and when the next one is due.
 
 Each provider card has a **setup guide**: sign up, get a key, curl/Python/JavaScript snippets, and a **key test that runs in the visitor's browser**, so the key goes straight to the provider and never to this site. There's also a **Try it in the test chat** link.
 
