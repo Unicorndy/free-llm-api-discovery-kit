@@ -62,7 +62,7 @@ export async function communityProvider(env, id) {
 
 /* ---------- The run ---------- */
 // emit(event) streams progress to the page: {type:'status'|'found'|'result'|'error', ...}
-export async function runDiscovery(env, { force = false, searchWeb, emit }) {
+export async function runDiscovery(env, { force = false, searchWeb, budget = async () => true, emit }) {
   if (!env.DISCOVERY) throw new Error('Discovery storage (KV) is not set up.');
   const previous = await latestDiscovery(env);
   const age = previous ? Date.now() - Date.parse(previous.at) : Infinity;
@@ -73,6 +73,11 @@ export async function runDiscovery(env, { force = false, searchWeb, emit }) {
   }
   if (await env.DISCOVERY.get('web:lock')) {
     emit({ type: 'status', message: 'Someone else is running a web search right now. Showing the last results.' });
+    if (previous) emit({ type: 'result', data: previous, cached: true });
+    return previous;
+  }
+  if (!(await budget(QUERIES.length))) {
+    emit({ type: 'status', message: "Today's web search budget is used up, so this shows the last results. It resets at midnight UTC." });
     if (previous) emit({ type: 'result', data: previous, cached: true });
     return previous;
   }

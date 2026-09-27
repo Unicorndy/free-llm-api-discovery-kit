@@ -157,7 +157,7 @@ When it finishes, the site repo has a `providers.json`. Your server starts using
 
 ## 9. Private web search with SearXNG (optional)
 
-It runs in Docker on your machine and is reached only through a Cloudflare Tunnel, so **no ports are opened**. A small Caddy gate rejects every request without your secret key.
+It runs in Docker on your machine and is reached only through a Cloudflare Tunnel, so **no ports are opened**. A small nginx gate rejects every request without your secret key and caps all searches at `SEARXNG_RATE` (default 30 a minute). The Worker also enforces a daily budget, `SEARXNG_DAILY_LIMIT` in `wrangler.toml` (default 300).
 
 ```bash
 # One-time: authorize cloudflared for your domain (prints a URL to open and approve)

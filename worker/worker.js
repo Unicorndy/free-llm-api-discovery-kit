@@ -22,6 +22,7 @@
  *   SEARXNG_URL      e.g. https://searxng.example.com (private instance, see searxng/)
  *   SEARXNG_KEY      secret sent as X-Search-Key; the instance rejects requests without it
  *   API_KEYS         secret, comma-separated keys that may call the API from anywhere
+ *   SEARXNG_DAILY_LIMIT  SearXNG searches a day across chat and discovery (default 300; counted in KV)
  *   PROVIDER_ORDER, WORKERS_AI_MODEL, GROQ_MODEL, NVIDIA_MODEL, GUARD_MODEL   optional overrides
  */
 
@@ -362,6 +363,27 @@ async function searchTavily(q, env) {
 
 const hasSearxng = (env) => Boolean(env.SEARXNG_URL && env.SEARXNG_KEY);
 
+// Daily SearXNG budget shared by chat search and web discovery. The count lives in KV, so it covers all
+// Worker instances; it is approximate (KV reads can lag by up to a minute), and nginx in front of
+// SearXNG adds a hard per-minute limit.
+const searchBudgetKey = () => 'sx:' + new Date().toISOString().slice(0, 10);
+const searchBudgetLimit = (env) => Math.max(0, Number(env.SEARXNG_DAILY_LIMIT) || 300);
+async function takeSearchBudget(env, n = 1) {
+  if (!env.DISCOVERY) return true;
+  try {
+    const used = Number(await env.DISCOVERY.get(searchBudgetKey())) || 0;
+    if (used + n > searchBudgetLimit(env)) return false;
+    await env.DISCOVERY.put(searchBudgetKey(), String(used + n), { expirationTtl: 2 * 86400 });
+    return true;
+  } catch {
+    return true; // a KV hiccup shouldn't break search; nginx still caps the rate
+  }
+}
+async function searchBudgetUsed(env) {
+  if (!env.DISCOVERY) return null;
+  try { return Number(await env.DISCOVERY.get(searchBudgetKey())) || 0; } catch { return null; }
+}
+
 // SearXNG is free and self-hosted, so it handles every search. Tavily (1,000 credits a month)
 // only runs for time-sensitive questions, and only when SearXNG comes back thin.
 async function search(body, env) {
@@ -374,7 +396,7 @@ async function search(body, env) {
   if (hit && Date.now() - hit.at < 3600e3) return hit.data;
 
   let results = [];
-  if (hasSearxng(env)) {
+  if (hasSearxng(env) && await takeSearchBudget(env, 1)) {
     try { results = await searchSearxng(q, env); } catch (err) { console.log('searxng failed:', String(err)); }
   }
   if (fresh && results.length < 3 && env.TAVILY_KEY) {
@@ -429,7 +451,7 @@ function discoverStream(env, ctx, force, cors) {
   ctx.waitUntil((async () => {
     try {
       if (!hasSearxng(env)) throw new Error('Web search is not set up on this server.');
-      await runDiscovery(env, { force, searchWeb: (q) => searchSearxng(q, env, 10), emit });
+      await runDiscovery(env, { force, searchWeb: (q) => searchSearxng(q, env, 10), budget: (n) => takeSearchBudget(env, n), emit });
     } catch (err) {
       console.log('discovery failed:', String(err && err.stack || err));
       await emit({ type: 'error', message: String((err && err.message) || err).slice(0, 200) });
@@ -484,6 +506,7 @@ export default {
           tavily: Boolean(env.TAVILY_KEY),
           safetyCheck: Boolean(env.AI),
           api: Boolean(env.API_KEYS),
+          searxngToday: hasSearxng(env) ? { used: await searchBudgetUsed(env), limit: searchBudgetLimit(env) } : null,
         }, 200, cors);
       }
       if (url.pathname === '/discoveries' && request.method === 'GET') {

@@ -19,6 +19,8 @@ ALLOWED_ORIGIN = "https://YOUR-USERNAME.github.io"
 SEARXNG_URL = "https://search.example.com"
 # Daily model discovery results (written by the site repo's GitHub Action).
 CATALOG_URL = "https://YOUR-USERNAME.github.io/YOUR-SITE-REPO/providers.json"
+# SearXNG searches a day across chat and discovery (approximate, counted in KV)
+SEARXNG_DAILY_LIMIT = "300"
 # Optional overrides:
 # PROVIDER_ORDER = "groq,workers-ai,openrouter,nvidia"
 

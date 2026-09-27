@@ -64,7 +64,9 @@ How the code keeps them there:
 | **Rate limit:** 15 requests a minute per visitor IP, 30 per API key | `withinRateLimit` (~L394), `RATE_LIMIT_PER_MIN` / `API_RATE_LIMIT_PER_MIN` (~L38) |
 | **Request size:** 64 KB body cap, checked before and after reading | `MAX_BODY` (~L40), `readJson` (~L192) |
 | **Conversation shape:** at most 40 messages; roles limited to system/user/assistant; 12,000 characters each and 60,000 in total | `cleanMessages` (~L200) |
-| **Search rationing:** Tavily (1,000 credits a month) runs only for time-sensitive questions, and only when SearXNG returns fewer than 3 results. Results are cached for an hour. | `search` (~L367–L390) |
+| **Search rationing:** Tavily (1,000 credits a month) runs only for time-sensitive questions, and only when SearXNG returns fewer than 3 results. Results are cached for an hour. | `search` |
+| **Daily SearXNG budget:** `SEARXNG_DAILY_LIMIT` (default 300) searches a day across chat and discovery, counted in KV across all Worker instances (approximate). Once it's used up, chat search skips SearXNG (the browser's Wikipedia and DuckDuckGo still work) and discovery shows the last results. `/health` shows `searxngToday`. | `takeSearchBudget` |
+| **Live discovery pace:** at most one live web search an hour for everyone, and one at a time (KV lock). Each run uses 6 searches from the daily budget. | `LIVE_MIN_INTERVAL_MS` in `discover.js` |
 | **Browser-side limits:** a 4-second cooldown and 2,000-character messages | `COOLDOWN_MS`, `MAX_INPUT` (`site/app.js` ~L9–L10) |
 | **Discovery budget:** a capped number of tests per provider per run; OpenRouter gets only 8 (its free tier allows 50 a day), spaced to stay under the API rate limit | `PROVIDERS[].limit`, `WORKER_SPACING_MS` in `discover.mjs` |
 
@@ -95,14 +97,15 @@ How the code keeps them there:
 | Protection | Where |
 | --- | --- |
 | **No open ports:** the Compose file publishes no host ports. The only way in is the outbound Cloudflare Tunnel run by the `cloudflared` container. | `searxng/docker-compose.yml` |
-| **Key gate:** Caddy forwards to SearXNG only when the `X-Search-Key` header matches `SEARXNG_KEY`; everything else gets 403. The Caddy admin API is off. | `searxng/Caddyfile` |
+| **Key gate:** the nginx gate forwards to SearXNG only when the `X-Search-Key` header matches `SEARXNG_KEY`; everything else gets 403. The key check runs before the rate limit, so strangers can't use up the budget. The header is stripped before reaching SearXNG. | `searxng/nginx.conf.template` |
+| **Hard rate limit:** one shared bucket for all searches, `SEARXNG_RATE` (default 30 a minute) with short bursts of 10; over it, 429. This backstop holds even if the Worker misbehaves. | `limit_req` in `nginx.conf.template` |
 | **Random 256-bit secrets:** `SEARXNG_KEY` and `SEARXNG_SECRET` come from `openssl rand -hex 32` and live in `.env` (mode 600) | `SETUP.md` step 9 |
 | **Least privilege:** `cloudflared` runs as your user id, not root, and mounts only the one tunnel credentials file, read-only | `docker-compose.yml` (`user:`, `:ro`) |
 | **Resource cap:** SearXNG is limited to 1 GB of memory | `mem_limit` |
 | **Bot limiter off on purpose:** access is already restricted to the Worker, so SearXNG's own limiter isn't needed | `searxng/settings.yml` |
 
 **Limits:**
-- **Caddy's header check** is a plain string comparison. With a 256-bit random key sent over TLS, that's not practically exploitable.
+- **nginx's header check** is a plain string comparison. With a 256-bit random key sent over TLS, that's not practically exploitable.
 - **SearXNG queries search engines from your server's IP.** Some engines rate-limit or show CAPTCHAs to data-center IPs, and some forbid automated querying in their terms.
 - **Keep the host itself patched** (SSH, OS updates, firewall).
 

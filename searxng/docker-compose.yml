@@ -1,5 +1,5 @@
 # Private SearXNG for the Search Chat Worker.
-#   Worker --(X-Search-Key)--> Cloudflare Tunnel --> caddy (checks key) --> searxng
+#   Worker --(X-Search-Key)--> Cloudflare Tunnel --> gate (nginx: key check + rate limit) --> searxng
 # No host ports are published. Settings and secrets live in .env (gitignored, see .env.example):
 #   SEARXNG_HOSTNAME, TUNNEL_ID, TUNNEL_CREDENTIALS, SEARXNG_KEY, SEARXNG_SECRET.
 name: searxng
@@ -15,20 +15,22 @@ services:
       - ./settings.yml:/etc/searxng/settings.yml:ro
     mem_limit: 1g
 
-  caddy:
-    image: caddy:2-alpine
+  gate:
+    image: nginx:1-alpine
     restart: unless-stopped
     environment:
       SEARXNG_KEY: ${SEARXNG_KEY}
+      SEARXNG_RATE: ${SEARXNG_RATE:-30r/m}
+      NGINX_ENVSUBST_FILTER: "^SEARXNG_"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
     depends_on: [searxng]
 
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     user: "${UID_GID:-1000:1000}"   # must be able to read TUNNEL_CREDENTIALS
-    command: tunnel --no-autoupdate run --url http://caddy:80 --credentials-file /etc/cloudflared/creds.json ${TUNNEL_ID}
+    command: tunnel --no-autoupdate run --url http://gate:80 --credentials-file /etc/cloudflared/creds.json ${TUNNEL_ID}
     volumes:
       - ${TUNNEL_CREDENTIALS}:/etc/cloudflared/creds.json:ro
-    depends_on: [caddy]
+    depends_on: [gate]

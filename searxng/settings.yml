@@ -6,7 +6,7 @@ general:
   instance_name: "Search Chat"
 
 server:
-  # Access is gated by Caddy's shared key, so SearXNG's bot limiter isn't needed.
+  # Access is gated by the nginx gate (shared key + rate limit), so SearXNG's bot limiter isn't needed.
   limiter: false
   image_proxy: false
 

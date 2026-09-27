@@ -1,0 +1,31 @@
+# Gate in front of SearXNG (the official nginx image fills in ${SEARXNG_KEY} and ${SEARXNG_RATE} at start).
+#  1. Only requests with the shared key (X-Search-Key) get through; everything else: 403.
+#  2. A hard rate limit for everyone together: ${SEARXNG_RATE}, short bursts of 10; over it: 429.
+map_hash_bucket_size 128;   # the 64-character key needs more than the default 64
+# One shared bucket for all requests (nginx ignores requests whose key is empty, so use a constant).
+map $host $limit_all { default "all"; }
+limit_req_zone $limit_all zone=searxng:1m rate=${SEARXNG_RATE};
+
+map $http_x_search_key $search_key_ok {
+    default 0;
+    "${SEARXNG_KEY}" 1;
+}
+
+server {
+    listen 80 default_server;
+    server_tokens off;
+    client_max_body_size 16k;
+
+    location / {
+        if ($search_key_ok = 0) { return 403; }   # checked before the rate limit
+        limit_req zone=searxng burst=10 nodelay;
+        limit_req_status 429;
+
+        proxy_pass http://searxng:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Search-Key "";
+        proxy_read_timeout 15s;
+    }
+}
