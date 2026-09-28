@@ -14,6 +14,9 @@
  *   POST /discover       streams a web search for free LLM APIs (site; refreshes at most every DISCOVERY_INTERVAL_HOURS, default 6)
  *   GET  /discoveries    the latest web discovery results (public, no secrets)
  *   POST /v1/discover    same as /discover; API keys may send {"force": true}
+ *   GET  /v1/logs        recent issues (API keys only): discovery errors, dropped connections, provider
+ *                        and search failures, safety-check outages, server errors, browser reports
+ *   POST /report         the website reports a problem a visitor ran into (logged as a browser report)
  *
  * Settings (set by the setup assistant, or in the Cloudflare dashboard):
  *   ALLOWED_ORIGIN   e.g. https://yourname.github.io  (only this site may call /chat and /search)
@@ -46,6 +49,50 @@ const cfg = (env, k) => (env[k] && String(env[k]).trim()) || DEFAULTS[k];
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
+}
+
+/* ---------- Issue log ---------- */
+// Every issue goes to the console as one JSON line (kept by Cloudflare Workers Logs) and into a
+// short list in KV (last 100) that GET /v1/logs returns. KV writes are batched per isolate (at most
+// one every 10 s), so an outage can't use up the free write quota.
+const LOG_KEY = 'log:issues';
+const LOG_MAX = 100;
+const LOG_FLUSH_MS = 10000;
+const logState = { buffer: [], last: 0, pending: null, env: null };
+const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function logIssue(env, ctx, type, details = {}) {
+  const clip = (v) => (typeof v === 'string' ? v.slice(0, 300) : v);
+  const entry = { at: new Date().toISOString(), type, ...Object.fromEntries(Object.entries(details).map(([k, v]) => [k, clip(v)])) };
+  console.log(JSON.stringify({ issue: entry }));
+  if (!env.DISCOVERY) return;
+  logState.buffer.push(entry);
+  logState.env = env;
+  if (logState.buffer.length > 50) logState.buffer.shift();
+  if (logState.pending) return; // an upcoming flush will include it
+  const every = env.LOG_FLUSH_MS !== undefined ? Number(env.LOG_FLUSH_MS) : LOG_FLUSH_MS;
+  const wait = Math.max(0, logState.last + every - Date.now());
+  logState.pending = (async () => {
+    if (wait) await sleepMs(Math.min(wait, 20000));
+    const batch = logState.buffer;
+    logState.buffer = [];
+    logState.last = Date.now();
+    try {
+      const kv = logState.env.DISCOVERY;
+      const old = (await kv.get(LOG_KEY, 'json')) || [];
+      await kv.put(LOG_KEY, JSON.stringify([...old, ...batch].slice(-LOG_MAX)));
+    } catch (err) {
+      console.log(JSON.stringify({ issue: { at: new Date().toISOString(), type: 'log-write-failed', message: String(err).slice(0, 200) } }));
+    } finally {
+      logState.pending = null;
+    }
+  })();
+  if (ctx && ctx.waitUntil) ctx.waitUntil(logState.pending);
+}
+
+async function readIssues(env) {
+  if (!env.DISCOVERY) return [];
+  try { return ((await env.DISCOVERY.get(LOG_KEY, 'json')) || []).slice().reverse(); } catch { return []; }
 }
 
 /* ---------- Providers, tried in PROVIDER_ORDER ---------- */
@@ -178,7 +225,7 @@ function withTimeout(promise, ms) {
 const GUARD_CHUNK = 4000;
 const GUARD_STRIDE = 3500;
 const GUARD_MAX_CHUNKS = 24; // the 60,000-character message cap plus the sources block needs about 20
-async function isUnsafe(env, texts) {
+async function isUnsafe(env, texts, ctx) {
   if (!env.AI) return false;
   const all = texts.filter(Boolean).join('\n\n');
   const chunks = [];
@@ -199,7 +246,7 @@ async function isUnsafe(env, texts) {
     return verdicts.some(Boolean);
   } catch (err) {
     // Fail open: the system prompt and provider moderation still apply.
-    console.log('safety check unavailable:', String(err));
+    logIssue(env, ctx, 'safety-check-unavailable', { message: String(err) });
     return false;
   }
 }
@@ -255,7 +302,7 @@ function cleanMessages(input) {
 /* ---------- Handlers ---------- */
 // body.model: "auto"; a provider id ("groq") to try first; or "provider/model" for one exact model.
 // body.strict (API keys only): don't fall back to anything else. Discovery uses it for smoke tests.
-async function chat(body, env, trusted) {
+async function chat(body, env, trusted, ctx) {
   const messages = cleanMessages(body.messages);
   const catalog = await loadCatalog(env);
   let plan = configuredProviders(env).map((p) => ({ p, models: candidates(p, env, catalog).slice(0, 3) }));
@@ -292,7 +339,7 @@ async function chat(body, env, trusted) {
   const lastIdx = messages.map((m) => m.role).lastIndexOf('user');
   const sources = cleanSources(body.sources);
   const block = sources.map((r, i) => `[${i + 1}] ${r.title} (${r.site}, ${r.url})\n${r.snippet}`).join('\n\n');
-  if (await isUnsafe(env, [...messages.map((m) => m.content), block])) {
+  if (await isUnsafe(env, [...messages.map((m) => m.content), block], ctx)) {
     return completion(REFUSAL, 'safety-check', 'llama-guard');
   }
   if (block && lastIdx >= 0) {
@@ -303,13 +350,16 @@ async function chat(body, env, trusted) {
   for (const { p, models } of plan) {
     try {
       const out = await p.run(messages, env, models);
-      if (out.text && out.text.trim()) return completion(out.text, p.id, out.model || models[0]);
+      if (out.text && out.text.trim()) {
+        if (failures.length) logIssue(env, ctx, 'chat-provider-failed', { failures: failures.join('; '), answeredBy: p.id });
+        return completion(out.text, p.id, out.model || models[0]);
+      }
       failures.push(`${p.id}: empty reply`);
     } catch (err) {
       failures.push(`${p.id}: ${err.message}`);
     }
   }
-  console.log('all providers failed:', failures.join('; '));
+  logIssue(env, ctx, 'chat-all-providers-failed', { failures: failures.join('; '), strict });
   if (strict) throw new HttpError(502, `Model failed: ${failures.join('; ').slice(0, 300)}`);
   throw new HttpError(503, 'All free AI providers are busy right now. Try again in a minute.');
 }
@@ -436,7 +486,7 @@ async function searchBudgetUsed(env) {
 
 // SearXNG is free and self-hosted, so it handles every search. Tavily (1,000 credits a month)
 // only runs for time-sensitive questions, and only when SearXNG comes back thin.
-async function search(body, env) {
+async function search(body, env, ctx) {
   const q = String(body.q || '').trim().slice(0, 300);
   if (!q) throw new HttpError(400, 'Missing search query.');
   const fresh = body.fresh === true;
@@ -446,11 +496,15 @@ async function search(body, env) {
   if (hit && Date.now() - hit.at < 3600e3) return hit.data;
 
   let results = [];
-  if (hasSearxng(env) && await takeSearchBudget(env, 1)) {
-    try { results = await searchSearxng(q, env); } catch (err) { console.log('searxng failed:', String(err)); }
+  if (hasSearxng(env)) {
+    if (await takeSearchBudget(env, 1)) {
+      try { results = await searchSearxng(q, env); } catch (err) { logIssue(env, ctx, 'search-searxng-failed', { message: String(err) }); }
+    } else {
+      logIssue(env, ctx, 'search-budget-used-up', { limit: searchBudgetLimit(env) });
+    }
   }
   if (fresh && results.length < 3 && env.TAVILY_KEY) {
-    try { results = results.concat(await searchTavily(q, env)); } catch (err) { console.log('tavily failed:', String(err)); }
+    try { results = results.concat(await searchTavily(q, env)); } catch (err) { logIssue(env, ctx, 'search-tavily-failed', { message: String(err) }); }
   }
 
   const data = { results };
@@ -493,19 +547,45 @@ async function validApiKey(request, env) {
   return '';
 }
 
-function discoverStream(env, ctx, force, cors) {
+function discoverStream(env, ctx, force, cors, signal) {
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   const enc = new TextEncoder();
-  const emit = (e) => writer.write(enc.encode(`data: ${JSON.stringify(e)}\n\n`)).catch(() => {});
+  let lastStatus = '';
+  let clientGone = false;
+  const markGone = () => {
+    if (clientGone) return;
+    clientGone = true; // the run carries on and saves its result; the page can pick it up later
+    logIssue(env, ctx, 'discovery-client-disconnected', { stage: lastStatus });
+  };
+  // Fires when the visitor's connection closes (needs the enable_request_signal compatibility flag).
+  if (signal) signal.addEventListener('abort', markGone);
+  const send = (text) => writer.write(enc.encode(text)).catch(markGone);
+  const emit = (e) => {
+    if (e.type === 'status') lastStatus = e.message;
+    return send(`data: ${JSON.stringify(e)}\n\n`);
+  };
+  // Heartbeat: phones and proxies close connections that stay silent (the AI step can take a minute).
+  const heartbeat = setInterval(() => { send(': keep-alive\n\n'); }, 10000);
+  const started = Date.now();
   ctx.waitUntil((async () => {
     try {
       if (!hasSearxng(env)) throw new Error('Web search is not set up on this server.');
-      await runDiscovery(env, { force, searchWeb: (q) => searchSearxng(q, env, 10), budget: (n) => takeSearchBudget(env, n), emit });
+      const data = await runDiscovery(env, {
+        force,
+        searchWeb: (q) => searchSearxng(q, env, 10),
+        budget: (n) => takeSearchBudget(env, n),
+        emit,
+        log: (type, details) => logIssue(env, ctx, type, details),
+      });
+      if (data && Date.parse(data.at) >= started) {
+        console.log(JSON.stringify({ discovery: { at: data.at, pages: data.pagesRead, providers: (data.providers || []).length, ms: Date.now() - started } }));
+      }
     } catch (err) {
-      console.log('discovery failed:', String(err && err.stack || err));
+      logIssue(env, ctx, 'discovery-failed', { stage: lastStatus, message: String((err && err.message) || err), ms: Date.now() - started });
       await emit({ type: 'error', message: String((err && err.message) || err).slice(0, 200) });
     } finally {
+      clearInterval(heartbeat);
       try { await writer.close(); } catch { /* client left */ }
     }
   })());
@@ -520,6 +600,8 @@ const ROUTES = {
   'GET /v1/models': 'models',
   'GET /v1/provider-models': 'provider-models',
   'POST /discover': 'discover',
+  'POST /report': 'report',
+  'GET /v1/logs': 'logs',
   'POST /v1/discover': 'discover',
 };
 
@@ -577,20 +659,30 @@ export default {
       }
 
       if (route === 'models') return json(await listModels(env), 200, cors);
+      if (route === 'logs') {
+        if (!apiKey) throw new HttpError(403, 'Needs an API key.');
+        return json({ issues: await readIssues(env) }, 200, cors);
+      }
       if (route === 'provider-models') {
         if (!apiKey) throw new HttpError(403, 'Needs an API key.');
         return json(await providerModels(env, url.searchParams.get('provider') || ''), 200, cors);
       }
       const body = await readJson(request);
       if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'Invalid request.');
-      if (route === 'discover') return discoverStream(env, ctx, Boolean(apiKey) && body.force === true, cors);
-      if (route === 'search') return json(await search(body, env), 200, cors);
-      const data = await chat(body, env, Boolean(apiKey));
+      if (route === 'discover') return discoverStream(env, ctx, Boolean(apiKey) && body.force === true, cors, request.signal);
+      if (route === 'report') {
+        // A problem a visitor's browser ran into (for example a dropped connection). Short text only.
+        const clip = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').slice(0, n);
+        logIssue(env, ctx, 'browser-report', { where: clip(body.where, 40), message: clip(body.message, 200), stage: clip(body.stage, 200) });
+        return new Response(null, { status: 204, headers: cors });
+      }
+      if (route === 'search') return json(await search(body, env, ctx), 200, cors);
+      const data = await chat(body, env, Boolean(apiKey), ctx);
       if (body.stream === true && url.pathname.startsWith('/v1/')) return completionStream(data, cors);
       return json(data, 200, cors);
     } catch (err) {
       const status = err instanceof HttpError ? err.status : 500;
-      if (status === 500) console.log('error:', String(err && err.stack || err));
+      if (status === 500) logIssue(env, ctx, 'server-error', { path: url.pathname, message: String(err && err.stack || err) });
       const message = err instanceof HttpError ? err.message : 'The server hit an error. Try again.';
       return json({ error: { message } }, status, cors);
     }

@@ -50,6 +50,7 @@ How the code keeps them there:
 | --- | --- | --- |
 | **Origin lock** | `isAllowedOrigin` (~L406) | Only `ALLOWED_ORIGIN` (your github.io site) gets CORS headers. Browsers on any other site can't call `/chat` or `/search`. Preflight (`OPTIONS`) from other origins gets 403 (~L474). |
 | **API keys** | `validApiKey` (~L412) | `Authorization: Bearer <key>` is compared with every key in `API_KEYS` using **`crypto.subtle.timingSafeEqual`** (~L419), so response timing doesn't reveal how much of a key matched. A wrong key gets 401, and no key and no allowed origin gets 403 (~L498). |
+| **Issue log** | `logIssue` | Problems are logged as JSON lines (Cloudflare Workers Logs), and the last 100 are kept in KV. Only API keys can read them (`GET /v1/logs`). Entries hold short, clipped text, never secrets. Browser reports (`POST /report`) are rate-limited like every request, clipped to 200 characters, and KV writes are batched (at most one every 10 seconds per instance). |
 | **Route allow-list** | `ROUTES` (~L443) | Only listed method and path pairs exist. Everything else gets 404 before any work is done. Provider ids from requests are looked up with `Object.hasOwn`, so ids like `__proto__` or `constructor` can't reach built-in object properties. |
 | **Key-only features** | `chat(..., trusted)` (~L216–L260), `provider-models` (~L508) | Only API-key callers may use `strict`, try **arbitrary** model ids, or list a provider's models. The website may only pick models that discovery has checked (~L240), so it can't be used to run expensive or unexpected models. |
 

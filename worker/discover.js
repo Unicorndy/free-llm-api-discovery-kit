@@ -92,7 +92,7 @@ export async function runDiscovery(env, opts) {
   try { return await inflight; } finally { inflight = null; }
 }
 
-async function runDiscoveryOnce(env, { force = false, searchWeb, budget = async () => true, emit }) {
+async function runDiscoveryOnce(env, { force = false, searchWeb, budget = async () => true, emit, log = () => {} }) {
   if (!env.DISCOVERY) throw new Error('Discovery storage (KV) is not set up.');
   const previous = await latestDiscovery(env);
   const age = previous ? Date.now() - Date.parse(previous.at) : Infinity;
@@ -128,7 +128,10 @@ async function runDiscoveryOnce(env, { force = false, searchWeb, budget = async 
     for (const q of QUERIES) {
       emit({ type: 'status', message: `Searching the web: “${q}”` });
       let hits = [];
-      try { hits = await searchWeb(q); } catch (err) { emit({ type: 'status', message: `Search failed for one query (${clip(err.message, 80)}).` }); }
+      try { hits = await searchWeb(q); } catch (err) {
+        emit({ type: 'status', message: `Search failed for one query (${clip(err.message, 80)}).` });
+        log('discovery-search-failed', { query: q, message: String(err.message || err) });
+      }
       for (const h of hits) {
         const url = publicHttpsUrl(h.url);
         if (!url || seen.has(url)) continue;
@@ -141,7 +144,18 @@ async function runDiscoveryOnce(env, { force = false, searchWeb, budget = async 
     emit({ type: 'status', message: `Found ${results.length} pages. An AI is reading them for free LLM APIs…` });
 
     // 2. Extract with AI (results are untrusted data)
-    const extracted = await withTimeout(extractProviders(env, results), 90000);
+    // Progress while the AI reads (this step can take a minute).
+    const readStart = Date.now();
+    const ticker = setInterval(() => emit({ type: 'status', message: `Still reading… ${Math.round((Date.now() - readStart) / 1000)} s` }), 15000);
+    let extracted;
+    try {
+      extracted = await withTimeout(extractProviders(env, results), 90000);
+    } catch (err) {
+      log('discovery-extraction-failed', { message: String(err.message || err), ms: Date.now() - readStart, pages: results.length });
+      throw err;
+    } finally {
+      clearInterval(ticker);
+    }
     const providers = validate(extracted, results);
     emit({ type: 'status', message: `Identified ${providers.length} providers. Testing the ones that need no key…` });
 

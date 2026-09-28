@@ -120,6 +120,7 @@ curl https://search-chat.YOUR-SUBDOMAIN.workers.dev/v1/chat/completions \
 | **Change provider order or default models** | `[vars]` in `worker/wrangler.toml` (`PROVIDER_ORDER`, `GROQ_MODEL`, `WORKERS_AI_MODEL`, …), then `npx wrangler deploy` |
 | **Update the website** | Edit `site/` here, then copy the changed files into a clone of the site repo and push. Never copy `providers.json` over the site repo's, because the bot owns it there. |
 | **SearXNG logs, restart, update** | `cd searxng && sudo docker compose logs -f searxng` · `sudo docker compose restart` · `sudo docker compose pull && sudo docker compose up -d` |
+| **See what went wrong** | `curl -s https://search-chat.YOUR-SUBDOMAIN.workers.dev/v1/logs -H "Authorization: Bearer $(cat ~/.config/search-chat/api-key)" \| jq '.issues[:20]'`: the last 100 issues, newest first. Full console logs: Cloudflare dashboard → Workers & Pages → search-chat → Logs, or `npx wrangler tail`. |
 | **Is everything up?** | `SITE_URL=https://YOUR-USERNAME.github.io/YOUR-SITE-REPO/ WORKER_URL=https://search-chat.YOUR-SUBDOMAIN.workers.dev scripts/smoke-live.sh` (add `SEARXNG_URL` and `SITE_REPO` for the full 27 checks), plus `npm test` (offline) |
 
 ---

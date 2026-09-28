@@ -400,6 +400,10 @@ if (window.top !== window.self) {
     log.hidden = false;
     log.replaceChildren();
     const line = (text, cls) => { const li = el('li', cls, text); log.append(li); log.scrollTop = log.scrollHeight; };
+    const before = state.web && state.web.at ? Date.parse(state.web.at) : 0;
+    let lastStatus = '';
+    let gotResult = false;
+    let gotError = false;
     try {
       const res = await fetch(SERVER + '/discover', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', credentials: 'omit',
@@ -423,22 +427,54 @@ if (window.top !== window.self) {
           if (!chunk.startsWith('data:')) continue;
           let e;
           try { e = JSON.parse(chunk.slice(5)); } catch { continue; }
-          if (e.type === 'status') line(e.message);
+          if (e.type === 'status') { lastStatus = e.message; line(e.message); }
           else if (e.type === 'found' && e.provider) line(`${e.provider.name}: ${e.provider.status === 'working' ? 'works without a key' : e.provider.status}`, e.provider.status === 'working' ? 'ok' : '');
-          else if (e.type === 'error') line(e.message, 'bad');
+          else if (e.type === 'error') { gotError = true; line(e.message, 'bad'); }
           else if (e.type === 'result' && e.data) {
+            gotResult = true;
             state.web = e.data;
             line(e.cached ? 'Done (recent results).' : `Done: ${(e.data.providers || []).length} providers found.`, 'ok');
             renderAll();
           }
         }
       }
+      if (!gotResult && !gotError) throw new Error('the connection ended before the results arrived');
     } catch (err) {
-      line(`Discovery failed: ${err.message}`, 'bad');
+      reportProblem('discover', err.message, lastStatus);
+      // The search keeps running on the server even if this connection drops: wait for its result.
+      line(`The connection dropped (${err.message}). The search keeps running on the server; waiting for its results…`);
+      const fresh = await waitForNewResults(before);
+      if (fresh) {
+        state.web = fresh;
+        line(`Done: ${(fresh.providers || []).length} providers found.`, 'ok');
+        renderAll();
+      } else {
+        line('No new results yet. Try Run discovery again in a few minutes.', 'bad');
+      }
     } finally {
       btn.disabled = false;
       btn.textContent = 'Run discovery';
     }
+  }
+
+  // Tell the server about a problem this visitor hit (short text only; it goes to the owner's issue log).
+  function reportProblem(where, message, stage) {
+    if (!SERVER) return;
+    fetch(SERVER + '/report', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'omit', keepalive: true,
+      body: JSON.stringify({ where, message: String(message || '').slice(0, 200), stage: String(stage || '').slice(0, 200) }),
+    }).catch(() => {});
+  }
+
+  async function waitForNewResults(before) {
+    for (let i = 0; i < 24; i++) { // up to 2 minutes
+      await new Promise((r) => setTimeout(r, 5000));
+      try {
+        const d = await getJSON(SERVER + '/discoveries');
+        if (d && d.at && Date.parse(d.at) > before) return d;
+      } catch { /* keep waiting */ }
+    }
+    return null;
   }
 
   /* ---------- start ---------- */

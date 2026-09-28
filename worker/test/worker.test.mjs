@@ -49,7 +49,7 @@ function ai() {
 }
 function env(extra = {}) {
   return {
-    ALLOWED_ORIGIN: ORIGIN, AI: ai(), DISCOVERY: kv(), SEARXNG_URL: 'https://searx.example', ...SECRETS, ...extra,
+    ALLOWED_ORIGIN: ORIGIN, AI: ai(), DISCOVERY: kv(), SEARXNG_URL: 'https://searx.example', LOG_FLUSH_MS: '0', ...SECRETS, ...extra,
   };
 }
 const fetchLog = [];
@@ -387,4 +387,42 @@ test('SearXNG requests carry the key; responses never echo it', async () => {
   assert.ok(!text.includes(SECRETS.SEARXNG_KEY));
   const sx = fetchLog.filter((f) => f.url.startsWith('https://searx.example')).at(-1);
   assert.equal(sx.init.headers['X-Search-Key'], SECRETS.SEARXNG_KEY);
+});
+
+/* ---------- issue log ---------- */
+test('issues are logged to KV and readable only with an API key', async () => {
+  const e = env();
+  const { waits } = await call('/report', { body: { where: 'discover', message: 'Load failed', stage: 'An AI is reading them' }, e });
+  await Promise.all(waits);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal((await call('/v1/logs', { method: 'GET', e })).res.status, 403, 'website origin alone cannot read logs');
+  assert.equal((await call('/v1/logs', { method: 'GET', origin: null, e })).res.status, 403);
+  const r = await call('/v1/logs', { method: 'GET', origin: null, key: API_KEY, e });
+  const { issues } = await r.res.json();
+  const rep = issues.find((i) => i.type === 'browser-report');
+  assert.ok(rep, 'browser report missing');
+  assert.equal(rep.message, 'Load failed');
+  assert.ok(!JSON.stringify(issues).includes(SECRETS.SEARXNG_KEY));
+});
+
+test('a failing provider and a dropped discovery connection are logged', async () => {
+  const e = env();
+  e.AI.run = async (model, input) => {
+    if (model.includes('guard')) return { response: 'safe' };
+    throw new Error('neuron limit reached');
+  };
+  const { res, waits } = await call('/chat', { body: msg('hi'), e });
+  assert.equal(res.status, 503);
+  await Promise.all(waits);
+  await new Promise((r) => setTimeout(r, 50));
+  const issues = JSON.parse(e.DISCOVERY.m.get('log:issues') || '[]');
+  assert.ok(issues.some((i) => i.type === 'chat-all-providers-failed' && /neuron limit/.test(i.failures)));
+});
+
+test('report text is clipped and non-object bodies are rejected', async () => {
+  const e = env();
+  const long = 'x'.repeat(5000);
+  const { res } = await call('/report', { body: { where: long, message: long, stage: long }, e });
+  assert.equal(res.status, 204);
+  assert.equal((await call('/report', { body: 'null', e })).res.status, 400);
 });

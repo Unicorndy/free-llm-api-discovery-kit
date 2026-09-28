@@ -2,6 +2,8 @@
 name = "search-chat"
 main = "worker.js"
 compatibility_date = "2026-09-01"
+# request.signal fires when a visitor disconnects (used to log dropped discovery connections)
+compatibility_flags = ["enable_request_signal"]
 
 # Workers AI (free daily allowance, no key needed)
 [ai]
@@ -32,3 +34,7 @@ DISCOVERY_INTERVAL_HOURS = "6"
 #   npx wrangler secret put NVIDIA_KEY
 #   npx wrangler secret put TAVILY_KEY
 #   npx wrangler secret put SEARXNG_KEY
+
+# Keep Worker logs (console output, incl. the JSON "issue" lines) in Cloudflare Workers Logs
+[observability]
+enabled = true
