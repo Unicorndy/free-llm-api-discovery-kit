@@ -338,6 +338,7 @@ if (window.top !== window.self) {
         c.querySelector('.plinks').after(src);
       }
       if (w.status === 'failed' && w.error) c.querySelector('.ptier').after(el('p', 'muted small', `Test: ${w.error}`));
+      if (w.deepResult) c.querySelector('.ptier').after(el('p', 'muted small', `Docs check: ${w.deepResult}`));
       list.append(c);
     }
   }
@@ -346,8 +347,11 @@ if (window.top !== window.self) {
     const box = $('readyList');
     box.replaceChildren();
     const data = (state.catalog && state.catalog.data) || [];
-    const community = ((state.web && state.web.providers) || []).filter((w) => w.status === 'working' && w.testedModel)
-      .map((w) => ({ id: `community/${w.id}/${w.testedModel}`, name: `${w.name}: ${w.testedModel} (found on the web)` }));
+    // Verified keyless models found on the web (kept across searches, re-tested daily).
+    const seen = new Set();
+    const community = [...((state.web && state.web.community) || []), ...((state.web && state.web.providers) || []).filter((w) => w.status === 'working' && w.testedModel)]
+      .filter((w) => w.testedModel && !seen.has(w.id) && seen.add(w.id))
+      .map((w) => ({ id: `community/${w.id}/${w.testedModel}`, name: `${w.name}: ${w.testedModel} (found on the web${w.source === 'docs' ? ', API from its docs' : ''}, unverified)` }));
     const all = [...data, ...community];
     if (!all.length) { box.append(el('p', 'muted', 'The daily check has not produced a list yet.')); return; }
     const ul = el('ul', 'ready');

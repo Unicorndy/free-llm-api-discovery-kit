@@ -14,6 +14,8 @@
  *   POST /discover       streams a web search for free LLM APIs (site; refreshes at most every DISCOVERY_INTERVAL_HOURS, default 6)
  *   GET  /discoveries    the latest web discovery results (public, no secrets)
  *   POST /v1/discover    same as /discover; API keys may send {"force": true}
+ *   POST /v1/deep-check  re-test verified community models and read a few more providers' docs to find
+ *                        and test their API (API keys only; the daily job calls it). {"limit": 4, "retest": true}
  *   GET  /v1/logs        recent issues (API keys only): discovery errors, dropped connections, provider
  *                        and search failures, safety-check outages, server errors, browser reports
  *   POST /report         the website reports a problem a visitor ran into (logged as a browser report)
@@ -30,7 +32,7 @@
  *   PROVIDER_ORDER, WORKERS_AI_MODEL, GROQ_MODEL, NVIDIA_MODEL, GUARD_MODEL   optional overrides
  */
 
-import { runDiscovery, latestDiscovery, communityProvider, publicHttpsUrl, readCapped } from './discover.js';
+import { runDiscovery, latestDiscovery, communityProvider, communityList, deepCheckBatch, publicHttpsUrl, readCapped } from './discover.js';
 
 const DEFAULTS = {
   PROVIDER_ORDER: 'groq,workers-ai,openrouter,nvidia',
@@ -408,11 +410,17 @@ async function listModels(env) {
       ...providers.map((p) => ({ id: p.id, object: 'model', owned_by: p.id, description: `Best working ${p.id} model` })),
       ...providers.flatMap((p) => candidates(p, env, catalog)
         .map((m) => ({ id: `${p.id}/${m}`, object: 'model', owned_by: p.id }))),
-      ...(((await latestDiscovery(env)) || {}).providers || [])
-        .filter((p) => p.status === 'working' && p.testedModel)
-        .map((p) => ({ id: `community/${p.id}/${p.testedModel}`, object: 'model', owned_by: `community:${p.id}`, description: `Found on the web: ${p.name} (unverified)` })),
+      ...(await communityModels(env)).map((p) => ({ id: `community/${p.id}/${p.testedModel}`, object: 'model', owned_by: `community:${p.id}`, description: `Found on the web: ${p.name} (unverified)` })),
     ],
   };
+}
+
+// Working keyless models found on the web: the verified list, plus any in the latest search.
+async function communityModels(env) {
+  const byId = new Map();
+  for (const p of (((await latestDiscovery(env)) || {}).providers || [])) if (p.status === 'working' && p.testedModel) byId.set(p.id, p);
+  for (const p of await communityList(env)) if (p.status === 'working' && p.testedModel) byId.set(p.id, p);
+  return [...byId.values()];
 }
 
 async function providerModels(env, id) {
@@ -602,6 +610,7 @@ const ROUTES = {
   'POST /discover': 'discover',
   'POST /report': 'report',
   'GET /v1/logs': 'logs',
+  'POST /v1/deep-check': 'deep-check',
   'POST /v1/discover': 'discover',
 };
 
@@ -643,7 +652,9 @@ export default {
       }
       if (url.pathname === '/discoveries' && request.method === 'GET') {
         // Public data (no secrets), so any site may read it.
-        return json((await latestDiscovery(env)) || { at: null, providers: [] }, 200, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' });
+        const latest = (await latestDiscovery(env)) || { at: null, providers: [] };
+        const community = (await communityModels(env)).map((p) => ({ id: p.id, name: p.name, website: p.website, baseUrl: p.baseUrl, testedModel: p.testedModel, latencyMs: p.latencyMs, source: p.source || 'search', checked: p.checked || latest.at }));
+        return json({ ...latest, community }, 200, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' });
       }
       const route = ROUTES[`${request.method} ${url.pathname}`];
       if (!route) throw new HttpError(404, 'Not found.');
@@ -670,6 +681,11 @@ export default {
       const body = await readJson(request);
       if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'Invalid request.');
       if (route === 'discover') return discoverStream(env, ctx, Boolean(apiKey) && body.force === true, cors, request.signal);
+      if (route === 'deep-check') {
+        if (!apiKey) throw new HttpError(403, 'Needs an API key.');
+        const limit = Math.min(6, Math.max(1, Number(body.limit) || 4));
+        return json(await deepCheckBatch(env, { limit, retest: body.retest !== false, log: (type, d) => logIssue(env, ctx, type, d) }), 200, cors);
+      }
       if (route === 'report') {
         // A problem a visitor's browser ran into (for example a dropped connection). Short text only.
         const clip = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').slice(0, n);

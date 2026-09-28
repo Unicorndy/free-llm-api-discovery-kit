@@ -704,6 +704,17 @@ function modelLabel(m) {
   return label.length > 80 ? label.slice(0, 77) + '…' : label;
 }
 
+// Keyless models found on the web and tested by the site's server (never used by Automatic).
+async function communityModels() {
+  try {
+    const d = await fetchJSON(SITE_SERVER + '/discoveries');
+    return ((d && d.community) || []).filter((c) => c.id && c.testedModel).map((c) => ({
+      id: `community/${c.id}/${c.testedModel}`,
+      label: `Found on the web: ${String(c.name || c.id).slice(0, 40)} · ${String(c.testedModel).slice(0, 40)} (unverified)`,
+    }));
+  } catch { return []; }
+}
+
 function fillModels(models, keep) {
   const list = [...models];
   if (keep && !list.some((m) => m.id === keep)) list.unshift({ id: keep, label: keep });
@@ -749,6 +760,7 @@ async function refreshModels() {
       .filter((m) => m && (m.id || m.name))
       .map((m) => ({ ...m, id: m.id || m.name }));
     const models = p.filterModels(raw, ctx).map((m) => ({ id: m.id, label: modelLabel(m) }));
+    if (id === 'site' && SITE_SERVER) models.push(...await communityModels());
     fillModels(models.length ? models : p.fallbackModels, keep);
     const found = models.filter((m) => m.id !== 'auto').length;
     els.modelStatus.textContent = found

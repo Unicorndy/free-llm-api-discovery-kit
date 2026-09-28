@@ -183,6 +183,22 @@ async function main() {
   };
   await writeFile(OUT, JSON.stringify(result, null, 2) + '\n');
   console.log(`\nWrote ${data.length} working server models across ${out.filter((p) => p.working).length} providers.`);
+
+  // Web-found keyless APIs: re-test the verified ones and read a few more providers' docs (done by the Worker).
+  if (!process.env.DISCOVER_SKIP_TESTS) {
+    try {
+      const res = await fetch(`${BASE}/deep-check`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
+        body: JSON.stringify({ limit: 4, retest: true }), signal: AbortSignal.timeout(240000),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error((d.error && d.error.message) || `HTTP ${res.status}`);
+      for (const r of d.retested || []) console.log(`community    ${r.status === 'working' ? 'ok  ' : 'FAIL'} ${r.id} (re-test)`);
+      for (const c of d.checked || []) console.log(`docs check   ${c.id}: ${c.result}`);
+    } catch (err) {
+      console.log(`Deep check skipped: ${err.message}`); // never fails the daily run
+    }
+  }
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });

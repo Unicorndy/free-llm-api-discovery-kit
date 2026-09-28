@@ -43,6 +43,14 @@ To run your own copy on your own GitHub and Cloudflare accounts, follow **[SETUP
 
 Each provider card has a **setup guide**: sign up, get a key, curl/Python/JavaScript snippets, and a **key test that runs in the visitor's browser**, so the key goes straight to the provider and never to this site. There's also a **Try it in the test chat** link.
 
+**Deep check (read the docs, then test).** Search snippets rarely mention an API address, so most web-found providers would stay untested. After each live search, and again in the daily job (`POST /v1/deep-check`), the Worker takes a few providers without a known API:
+1. It fetches their docs page or website (text only, the first 150 KB, redirects only within their own domain).
+2. Workers AI extracts the OpenAI-compatible API address, an example model, and whether a key is needed.
+3. The address must be on the provider's own domain, with plain characters, and the model name must be plain.
+4. The Worker tests the API with a "pong" prompt.
+
+Keyless APIs that pass are kept in a verified list (KV `community:verified`) that survives later searches. They're re-tested daily, and dropped after 3 failed re-tests in a row or 7 days without a success. They appear in the test chat's Settings list, in "Ready to use" on the home page, and in `/v1/models`. Most free APIs need a key, so the usual outcome is an accurate "needs a key" label with setup links.
+
 **Web-found providers that work without a key** become selectable as `community/<id>/<model>` in the test chat and the API. They're never used by **Automatic**, so a prompt only goes to an unknown service when someone chooses it.
 
 **How a chat question is answered**
