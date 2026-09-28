@@ -83,3 +83,8 @@ a.as-button { display: inline-block; text-decoration: none; }
   .kt-row { flex-direction: column; }
 }
 .guide, .guide-body, .steps li, .tabs, .keytest { min-width: 0; }
+
+/* Newly found working models */
+.newlist .nl-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
+.newlist .nl-name { font-weight: 700; overflow-wrap: anywhere; }
+.newlist .nl-meta { color: var(--muted); font-size: .8rem; flex-basis: 100%; }

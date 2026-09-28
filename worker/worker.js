@@ -653,7 +653,7 @@ export default {
       if (url.pathname === '/discoveries' && request.method === 'GET') {
         // Public data (no secrets), so any site may read it.
         const latest = (await latestDiscovery(env)) || { at: null, providers: [] };
-        const community = (await communityModels(env)).map((p) => ({ id: p.id, name: p.name, website: p.website, baseUrl: p.baseUrl, testedModel: p.testedModel, latencyMs: p.latencyMs, source: p.source || 'search', checked: p.checked || latest.at }));
+        const community = (await communityModels(env)).map((p) => ({ id: p.id, name: p.name, website: p.website, baseUrl: p.baseUrl, testedModel: p.testedModel, latencyMs: p.latencyMs, source: p.source || 'search', checked: p.checked || latest.at, firstFound: p.firstFound || p.checked || latest.at }));
         return json({ ...latest, community }, 200, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=60' });
       }
       const route = ROUTES[`${request.method} ${url.pathname}`];

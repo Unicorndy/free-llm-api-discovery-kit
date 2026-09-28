@@ -53,6 +53,8 @@ Keyless APIs that pass are kept in a verified list (KV `community:verified`) tha
 
 **Web-found providers that work without a key** become selectable as `community/<id>/<model>` in the test chat and the API. They're never used by **Automatic**, so a prompt only goes to an unknown service when someone chooses it.
 
+**Newly found working models.** The home page lists every model by the date it first passed a test, newest first, with a NEW badge for the past 7 days and a Try button. The date is `firstWorking` in `providers.json` (approved providers, from the daily job) or `firstFound` in the verified community list (keyless APIs from the web). Both are kept across runs, so new models are added at the top.
+
 **How a chat question is answered**
 
 1. The browser decides whether the question needs a search. If it does, it asks the Worker's `/search` in parallel with Wikipedia and DuckDuckGo.

@@ -373,6 +373,42 @@ if (window.top !== window.self) {
     }
   }
 
+  // Models in the order they first passed a test (newest first): approved providers' models from the
+  // daily job, plus keyless APIs found on the web.
+  function renderNew() {
+    const box = $('newList');
+    box.replaceChildren();
+    const entries = [
+      ...((state.catalog && state.catalog.data) || []).filter((m) => m.firstWorking)
+        .map((m) => ({ id: m.id, name: m.name || m.id, date: m.firstWorking, note: '' })),
+      ...((state.web && state.web.community) || []).filter((c) => c.testedModel)
+        .map((c) => ({ id: `community/${c.id}/${c.testedModel}`, name: `${c.name}: ${c.testedModel}`, date: c.firstFound || c.checked, note: c.source === 'docs' ? 'found on the web (API from its docs), unverified' : 'found on the web, unverified' })),
+    ].filter((x) => !isNaN(Date.parse(x.date))).sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+    if (!entries.length) { box.append(el('p', 'muted', 'No tested models yet. The daily check adds them here.')); return; }
+    const ul = el('ul', 'ready newlist');
+    entries.forEach((m, i) => {
+      const li = el('li');
+      if (i >= 10) li.hidden = true;
+      const left = el('div', 'nl-main');
+      const title = el('span', 'nl-name', m.name);
+      if (Date.now() - Date.parse(m.date) < 7 * 86400e3) left.append(el('span', 'badge on', 'NEW'));
+      left.append(title);
+      const meta = el('span', 'nl-meta', `first worked ${new Date(m.date).toLocaleDateString()}${m.note ? ' · ' + m.note : ''}`);
+      left.append(meta);
+      const a = el('a', 'try', 'Try');
+      a.href = `chat.html?model=${encodeURIComponent(m.id)}`;
+      li.append(left, a);
+      ul.append(li);
+    });
+    box.append(ul);
+    if (entries.length > 10) {
+      const more = el('button', 'link', `Show all ${entries.length}`);
+      more.type = 'button';
+      more.addEventListener('click', () => { ul.querySelectorAll('li[hidden]').forEach((li) => { li.hidden = false; }); more.remove(); });
+      box.append(more);
+    }
+  }
+
   function renderStats() {
     const { fresh } = webSplit();
     const ready = ((state.catalog && state.catalog.data) || []).length;
@@ -392,7 +428,7 @@ if (window.top !== window.self) {
     });
   }
 
-  function renderAll() { renderKnown(); renderWeb(); renderReady(); renderStats(); applyFilter(); }
+  function renderAll() { renderNew(); renderKnown(); renderWeb(); renderReady(); renderStats(); applyFilter(); }
 
   /* ---------- live discovery (server-sent events) ---------- */
   async function runDiscovery() {

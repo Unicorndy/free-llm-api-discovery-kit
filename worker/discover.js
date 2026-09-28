@@ -321,6 +321,7 @@ export async function recordCheck(env, p, result) {
       id: p.id, name: clip(p.name, 60), website: p.website || '', baseUrl: result.baseUrl || p.baseUrl,
       testedModel: result.testedModel, latencyMs: result.latencyMs || null, status: 'working',
       source: result.source || (i >= 0 ? list[i].source : 'search'), checked: now, lastOk: now, fails: 0,
+      firstFound: (i >= 0 && list[i].firstFound) || now,
     };
     if (i >= 0) list[i] = entry; else list.push(entry);
   } else if (i >= 0) {

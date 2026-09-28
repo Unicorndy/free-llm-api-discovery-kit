@@ -534,3 +534,17 @@ test('deep check reads the start of a very large docs page instead of giving up'
     assert.equal(r.status, 'working');
   } finally { restore(); }
 });
+
+test('a community model keeps its first-found date across re-tests', async () => {
+  const e = env();
+  const p = { id: 'keep.dev', name: 'Keep', baseUrl: 'https://api.keep.dev/v1' };
+  await recordCheck(e, p, { status: 'working', testedModel: 'k1', baseUrl: p.baseUrl });
+  const first = (await communityList(e))[0].firstFound;
+  await new Promise((r) => setTimeout(r, 5));
+  await recordCheck(e, p, { status: 'working', testedModel: 'k1', baseUrl: p.baseUrl });
+  const after = (await communityList(e))[0];
+  assert.equal(after.firstFound, first);
+  assert.notEqual(after.lastOk, first);
+  const disc = await (await call('/discoveries', { method: 'GET', origin: null, e })).res.json();
+  assert.equal(disc.community[0].firstFound, first);
+});

@@ -129,6 +129,9 @@ async function main() {
   let previous = { providers: [] };
   try { previous = JSON.parse(await readFile(OUT, 'utf8')); } catch { /* first run */ }
   const health = await getJSON(BASE.replace(/\/v1$/, '') + '/health');
+  // firstWorking = when a model first passed a test (kept across runs). Files from before this field
+  // existed get the previous run's time, so today's models aren't all shown as brand new.
+  const migrating = previous.providers.length > 0 && !previous.providers.some((p) => (p.models || []).some((m) => m.firstWorking));
   const onServer = new Set(health.providers || []);
   const now = new Date().toISOString();
   const out = [];
@@ -158,6 +161,9 @@ async function main() {
       await sleep(p.spacingMs || WORKER_SPACING_MS);
     }
 
+    for (const m of models) {
+      if (m.ok === true && !m.firstWorking) m.firstWorking = migrating && before.has(m.id) ? previous.updated : now;
+    }
     models.sort(rank);
     const { include, publicList, test, limit, spacingMs, via, ...meta } = p;
     out.push({
@@ -165,14 +171,14 @@ async function main() {
       configured,
       ...(listError ? { listError } : {}),
       working: models.filter((m) => m.ok === true).length,
-      models: models.map(({ id, ok, latencyMs, checked, context, error }) =>
-        ({ id, ok, latencyMs: latencyMs || null, checked, ...(context ? { context } : {}), ...(error && ok === false ? { error } : {}) })),
+      models: models.map(({ id, ok, latencyMs, checked, context, error, firstWorking }) =>
+        ({ id, ok, latencyMs: latencyMs || null, checked, ...(firstWorking ? { firstWorking } : {}), ...(context ? { context } : {}), ...(error && ok === false ? { error } : {}) })),
     });
   }
 
   // OpenAI-style list of the models the site's server can use right now (read by the Settings dialog).
   const data = out.filter((p) => p.configured && p.id !== 'pollinations').flatMap((p) =>
-    p.models.filter((m) => m.ok === true).map((m) => ({ id: `${p.id}/${m.id}`, name: `${p.name}: ${m.id.split('/').pop()}`, owned_by: p.id })));
+    p.models.filter((m) => m.ok === true).map((m) => ({ id: `${p.id}/${m.id}`, name: `${p.name}: ${m.id.split('/').pop()}`, owned_by: p.id, firstWorking: m.firstWorking })));
 
   const result = {
     updated: now,
